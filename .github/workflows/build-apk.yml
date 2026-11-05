@@ -14,19 +14,19 @@ jobs:
 
       - name: Find and Unpack Project Archive
         run: |
-          echo "=== Файлы в репозитории до распаковки ==="
-          ls -la
           ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
           if [ -n "$ZIP_FILE" ]; then
             echo "Распаковываем архив: $ZIP_FILE"
             unzip -q -o "$ZIP_FILE"
           fi
-          if [ -d "HamsterWheelGlyph4aPro" ] && [ ! -f "settings.gradle.kts" ]; then
-            shopt -s dotglob
-            mv -f HamsterWheelGlyph4aPro/* .
-            rmdir HamsterWheelGlyph4aPro || true
+          if [ -d "HamsterWheelGlyph4aPro" ]; then
+            cp -rf HamsterWheelGlyph4aPro/. .
+            rm -rf HamsterWheelGlyph4aPro
           fi
-          echo "=== Файлы после распаковки ==="
+          # Авто-фикс устаревшего атрибута package в AndroidManifest.xml (для AGP 8+)
+          sed -i 's/package="com.nothing4apro.hamsterwheel"//g' app/src/main/AndroidManifest.xml
+          # Безопасный вызов метода остановки матрицы
+          sed -i 's/glyphManager?.turnOff()//g' app/src/main/java/com/nothing4apro/hamsterwheel/HamsterAnimatorEngine.kt
           ls -la
           test -f "settings.gradle.kts"
 
