@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.nothing4apro.hamsterwheel.app-debug-32:/xml_hamster_widget_info.xml.flat",
+        "source": "com.nothing4apro.hamsterwheel.app-main-34:/xml/hamster_widget_info.xml"
+    },
+    {
+        "merged": "com.nothing4apro.hamsterwheel.app-debug-32:/layout_hamster_widget.xml.flat",
+        "source": "com.nothing4apro.hamsterwheel.app-main-34:/layout/hamster_widget.xml"
+    },
+    {
+        "merged": "com.nothing4apro.hamsterwheel.app-debug-32:/drawable_ic_toy_preview.xml.flat",
+        "source": "com.nothing4apro.hamsterwheel.app-main-34:/drawable/ic_toy_preview.xml"
+    }
+]

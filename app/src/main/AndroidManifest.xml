@@ -19,7 +19,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.NoActionBar">
 
-        <!-- SDK key metadata for Nothing Glyph Developer Kit compatibility -->
         <meta-data
             android:name="NothingKey"
             android:value="test" />
@@ -33,10 +32,7 @@
             </intent-filter>
         </activity>
 
-        <!--
-            1. Official Nothing Glyph Toy Service (AOD Toy for Nothing Phone 4a Pro 13x13 Matrix)
-            Appears in Settings -> Glyph Interface -> Flip to Glyph -> Always-on Glyph Toy
-        -->
+        <!-- 1. Official Nothing Glyph Toy Service (13x13 Matrix) -->
         <service
             android:name=".HamsterToyService"
             android:exported="true">
@@ -61,11 +57,7 @@
                 android:value="1" />
         </service>
 
-        <!--
-            2. Screen-On & Charging Persistence Foreground Service
-            Ensures the 13x13 hamster wheel animation NEVER stops when the screen turns on,
-            and reacts instantaneously to power connect / disconnect with smooth deceleration.
-        -->
+        <!-- 2. Screen-On & Charging Persistence Foreground Service -->
         <service
             android:name=".HamsterForegroundService"
             android:enabled="true"
@@ -73,10 +65,33 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Continuous Glyph Matrix LED animation for charging and screen-on state on Nothing Phone (4a) Pro" />
+                android:value="Continuous Glyph Matrix LED animation and live widget updates on Nothing Phone (4a) Pro" />
         </service>
 
-        <!-- Power & Boot Receiver -->
+        <!-- 3. Media Session Monitor Service to filter out YouTube video playback from triggering music dance -->
+        <service
+            android:name=".MediaSessionMonitorService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- 4. Home Screen & Lock Screen Widget -->
+        <receiver
+            android:name=".HamsterWidgetProvider"
+            android:exported="true"
+            android:label="Charging Hamster 13×13">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hamster_widget_info" />
+        </receiver>
+
+        <!-- 5. Power & Boot Receiver -->
         <receiver
             android:name=".PowerStateReceiver"
             android:exported="true">

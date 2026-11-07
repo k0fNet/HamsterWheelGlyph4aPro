@@ -1,7 +1,10 @@
 package com.nothing4apro.hamsterwheel
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -9,14 +12,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * Pixel-accurate 13×13 (137 mini-LEDs) frame generator for Nothing Phone (4a) Pro (`Glyph.DEVICE_25111p`).
- *
- * Supported Animations:
- * 1. SLEEPING: Hamster sleeps at the bottom of the wheel. Clean body shape (no stray pixels),
- *    single-pixel sleep particles spawn at row 8 and drift upward over 30 seconds.
- * 2. RUNNING: Fast 70ms 4-step gallop with clockwise rotating wheel spokes.
- * 3. WHEEL_LOOP_STOP: Unplug transition — hamster clings to wheel for 1 full clockwise 360° turn as wheel slows down.
- * 4. DANCING: Music reactive mode — hamster bobs, taps paws, throws arms up with floating musical notes ♪/♫.
+ * 13×13 (137 mini-LEDs) frame generator for Nothing Phone (4a) Pro (`Glyph.DEVICE_25111p`).
  */
 object HamsterFrames13x13 {
 
@@ -28,8 +24,9 @@ object HamsterFrames13x13 {
     private const val WHEEL_BRIGHTNESS = 75
     private const val HAMSTER_BRIGHTNESS = 255
 
-    const val SLEEP_CYCLE_LENGTH = 160 // 160 * 190 ms = 30.4 seconds loop
+    const val SLEEP_CYCLE_LENGTH = 160 // 160 * 190 ms = 30.4s loop
     const val WHEEL_LOOP_STEPS = 12
+    const val DANCE_CYCLE_LENGTH = 16
 
     private val RIM_COORDS: List<Pair<Int, Int>> = listOf(
         Pair(0, 4), Pair(0, 5), Pair(0, 6), Pair(0, 7), Pair(0, 8),
@@ -49,7 +46,6 @@ object HamsterFrames13x13 {
 
     private val RIM_SET: Set<Pair<Int, Int>> = RIM_COORDS.toSet()
 
-    // Clockwise rotating wheel spoke phases: 0 -> 1 -> 2 -> 3
     private val SPOKE_PHASES_CW: Array<List<Pair<Int, Int>>> = arrayOf(
         // Phase 0: 45° diagonal X-spokes
         listOf(
@@ -85,6 +81,112 @@ object HamsterFrames13x13 {
         )
     )
 
+    private data class DanceStep(
+        val body: List<Pair<Int, Int>>,
+        val eye: Pair<Int, Int>,
+        val notes: List<Pair<Int, Int>>
+    )
+
+    // 16-frame smooth chubby hamster dance on a stationary wheel (no rabbit ears, no wheel rotation!)
+    private val DANCE_STEPS_16: Array<DanceStep> = arrayOf(
+        // 0: Facing right, upright, ear (8,6), eye (9,7), note spawns on right (r=6)
+        DanceStep(
+            body = listOf(Pair(8,6), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
+            eye = Pair(9,7),
+            notes = listOf(Pair(6,9), Pair(6,10), Pair(7,9))
+        ),
+        // 1: Beat squish right (chubby cheeks!), right paw taps up (10,9), note rises to r=5
+        DanceStep(
+            body = listOf(Pair(8,7), Pair(9,4),Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8),Pair(10,9), Pair(11,4),Pair(11,7)),
+            eye = Pair(9,7),
+            notes = listOf(Pair(5,9), Pair(5,10), Pair(6,9))
+        ),
+        // 2: Bounce up facing right, ear (8,7), note rises to r=4
+        DanceStep(
+            body = listOf(Pair(8,7), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,5),Pair(11,8)),
+            eye = Pair(9,7),
+            notes = listOf(Pair(4,9), Pair(4,10), Pair(5,9))
+        ),
+        // 3: Smooth center turn (chubby round dome), note rises to r=3
+        DanceStep(
+            body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,5),Pair(11,7),Pair(11,8)),
+            eye = Pair(9,6),
+            notes = listOf(Pair(3,9), Pair(3,10), Pair(4,9))
+        ),
+        // 4: Facing left! Ear (8,6), eye (9,5), snout (9,4), note spawns on left (r=6)
+        DanceStep(
+            body = listOf(Pair(8,6), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
+            eye = Pair(9,5),
+            notes = listOf(Pair(2,9), Pair(6,3), Pair(6,4), Pair(7,4))
+        ),
+        // 5: Beat squish left (chubby cheeks!), left paw taps up (10,3), note rises to r=5
+        DanceStep(
+            body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7),Pair(9,8), Pair(10,3),Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,5),Pair(11,8)),
+            eye = Pair(9,5),
+            notes = listOf(Pair(5,3), Pair(5,4), Pair(6,4))
+        ),
+        // 6: Bounce up facing left, ear (8,5), note rises to r=4
+        DanceStep(
+            body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,7)),
+            eye = Pair(9,5),
+            notes = listOf(Pair(4,3), Pair(4,4), Pair(5,4))
+        ),
+        // 7: Smooth center turn, note rises to r=3
+        DanceStep(
+            body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,5),Pair(11,7),Pair(11,8)),
+            eye = Pair(9,6),
+            notes = listOf(Pair(3,3), Pair(3,4), Pair(4,4))
+        ),
+        // 8: Groove right 2, double-beat note trail
+        DanceStep(
+            body = listOf(Pair(8,6), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
+            eye = Pair(9,7),
+            notes = listOf(Pair(2,3), Pair(6,8), Pair(5,9))
+        ),
+        // 9: Happy hop right (paws tucked, chubby body)
+        DanceStep(
+            body = listOf(Pair(8,7), Pair(9,4),Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8),Pair(10,9), Pair(11,5),Pair(11,7)),
+            eye = Pair(9,7),
+            notes = listOf(Pair(5,8), Pair(4,9))
+        ),
+        // 10: Land right (paws wide)
+        DanceStep(
+            body = listOf(Pair(8,7), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,3),Pair(11,8)),
+            eye = Pair(9,7),
+            notes = listOf(Pair(4,8), Pair(3,9))
+        ),
+        // 11: Center groove
+        DanceStep(
+            body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,6),Pair(11,8)),
+            eye = Pair(9,6),
+            notes = listOf(Pair(3,8), Pair(2,9))
+        ),
+        // 12: Groove left 2
+        DanceStep(
+            body = listOf(Pair(8,6), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
+            eye = Pair(9,5),
+            notes = listOf(Pair(2,8), Pair(6,4), Pair(5,3))
+        ),
+        // 13: Happy hop left (paws tucked, chubby body)
+        DanceStep(
+            body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7),Pair(9,8), Pair(10,3),Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,5),Pair(11,7)),
+            eye = Pair(9,5),
+            notes = listOf(Pair(5,4), Pair(4,3))
+        ),
+        // 14: Land left (paws wide)
+        DanceStep(
+            body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,9)),
+            eye = Pair(9,5),
+            notes = listOf(Pair(4,4), Pair(3,3))
+        ),
+        // 15: Center groove back to 0
+        DanceStep(
+            body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,6),Pair(11,8)),
+            eye = Pair(9,6),
+            notes = listOf(Pair(3,4), Pair(2,3))
+        )
+    )
+
     fun isValidCell(r: Int, c: Int): Boolean {
         if (r !in 0 until MATRIX_SIZE || c !in 0 until MATRIX_SIZE) return false
         val ledsInRow = ROWS_13[r]
@@ -106,20 +208,10 @@ object HamsterFrames13x13 {
         return grid
     }
 
-    /**
-     * Seamless 160-step sleeping animation.
-     * Clean sleeping hamster body at rows 9..11 (stray pixel on (9,8) removed!).
-     * Single-pixel sleep particles spawn at row 8 and drift upward over 8 steps.
-     * Starts with empty sky if `sleepStepIndex == 0` (e.g. freshly stopped from wheel loop).
-     */
     fun getSleepingFrame(stepIndex: Int): IntArray {
         val s = ((stepIndex % SLEEP_CYCLE_LENGTH) + SLEEP_CYCLE_LENGTH) % SLEEP_CYCLE_LENGTH
         val grid = buildWheelBase(spokePhase = 0)
 
-        // Clean sleeping hamster body:
-        // Row 9: cols 6..7 strictly (never lights up col 8!)
-        // Row 10: cols 5..8
-        // Row 11: cols 4..8
         grid[9 * MATRIX_SIZE + 6] = HAMSTER_BRIGHTNESS
         grid[9 * MATRIX_SIZE + 7] = HAMSTER_BRIGHTNESS
         for (c in 5..8) {
@@ -129,14 +221,12 @@ object HamsterFrames13x13 {
             grid[11 * MATRIX_SIZE + c] = HAMSTER_BRIGHTNESS
         }
 
-        // Particle emitter spawning every 5 steps
         for (k in 0 until 32) {
             val spawnStep = k * 5
             val age = (s - spawnStep + SLEEP_CYCLE_LENGTH) % SLEEP_CYCLE_LENGTH
-            // Only show particles that spawned after step 0 when freshly sleeping
             if (stepIndex < 35 && spawnStep > stepIndex) continue
             if (age in 0..7) {
-                val r = 8 - age // Rises 1 row per step from row 8 up to row 1
+                val r = 8 - age
                 val wave = sin(2.0 * PI * (spawnStep / 160.0) * 3.0 + age * 0.45)
                 val c = (7.5 + 1.5 * wave).roundToInt().coerceIn(5, 9)
                 if (isValidCell(r, c)) {
@@ -148,28 +238,25 @@ object HamsterFrames13x13 {
         return grid
     }
 
-    /**
-     * Running hamster frame matching Screenshots 3 & 4 with clockwise rotating spokes.
-     */
     fun getRunningFrame(stepIndex: Int): IntArray {
         val phase = ((stepIndex % 4) + 4) % 4
         val grid = buildWheelBase(spokePhase = phase)
 
         val bodyPixels = listOf(
-            Pair(8, 7),                                         // Ear
-            Pair(9, 5), Pair(9, 6), Pair(9, 8),                 // Head ((9,7) is eye)
-            Pair(10, 4), Pair(10, 5), Pair(10, 6), Pair(10, 7), Pair(10, 8) // Torso
+            Pair(8, 7),
+            Pair(9, 5), Pair(9, 6), Pair(9, 8),
+            Pair(10, 4), Pair(10, 5), Pair(10, 6), Pair(10, 7), Pair(10, 8)
         )
         for ((r, c) in bodyPixels) {
             grid[r * MATRIX_SIZE + c] = HAMSTER_BRIGHTNESS
         }
-        grid[9 * MATRIX_SIZE + 7] = 0 // Keep eye dark
+        grid[9 * MATRIX_SIZE + 7] = 0
 
         val legs = when (phase) {
             0 -> listOf(Pair(11, 3), Pair(11, 7))
-            1 -> listOf(Pair(11, 4), Pair(11, 6)) // Stride 1
+            1 -> listOf(Pair(11, 4), Pair(11, 6))
             2 -> listOf(Pair(11, 5), Pair(11, 7))
-            else -> listOf(Pair(11, 4), Pair(11, 8)) // Stride 3
+            else -> listOf(Pair(11, 4), Pair(11, 8))
         }
         for ((r, c) in legs) {
             grid[r * MATRIX_SIZE + c] = HAMSTER_BRIGHTNESS
@@ -178,10 +265,6 @@ object HamsterFrames13x13 {
         return grid
     }
 
-    /**
-     * Full 360-degree CLOCKWISE revolution (`loopStep` 0..11) on the wheel when unplugged:
-     * Bottom (6 o'clock) -> Left wall (9 o'clock) -> Top (12 o'clock) -> Right wall (3 o'clock) -> Bottom.
-     */
     fun getWheelLoopFrame(loopStep: Int): IntArray {
         val step = ((loopStep % WHEEL_LOOP_STEPS) + WHEEL_LOOP_STEPS) % WHEEL_LOOP_STEPS
         val grid = buildWheelBase(spokePhase = step % 4)
@@ -203,75 +286,18 @@ object HamsterFrames13x13 {
     }
 
     /**
-     * 4-phase Dancing Hamster animation with floating musical notes ♪ / ♫ when audio is playing.
+     * 16-frame smooth Dancing Hamster animation on a STATIONARY wheel (`spokePhase = 0`).
      */
     fun getDancingFrame(stepIndex: Int): IntArray {
-        val p = ((stepIndex % 4) + 4) % 4
-        val grid = buildWheelBase(spokePhase = p)
+        val idx = ((stepIndex % DANCE_CYCLE_LENGTH) + DANCE_CYCLE_LENGTH) % DANCE_CYCLE_LENGTH
+        val grid = buildWheelBase(spokePhase = 0) // Wheel stays completely still!
+        val step = DANCE_STEPS_16[idx]
 
-        val body: List<Pair<Int, Int>>
-        val eyes: List<Pair<Int, Int>>
-        val notes: List<Pair<Int, Int>>
-
-        when (p) {
-            0 -> {
-                // Lean Right & groove
-                body = listOf(
-                    Pair(7, 7), Pair(7, 8),
-                    Pair(8, 6), Pair(8, 7), Pair(8, 8), Pair(8, 9),
-                    Pair(9, 5), Pair(9, 6), Pair(9, 7), Pair(9, 8), Pair(9, 9),
-                    Pair(10, 5), Pair(10, 6), Pair(10, 7), Pair(10, 8),
-                    Pair(11, 4), Pair(11, 5), Pair(11, 8), Pair(11, 9)
-                )
-                eyes = listOf(Pair(8, 7))
-                notes = listOf(Pair(3, 4), Pair(4, 4), Pair(5, 3), Pair(5, 4)) // Note ♪ left
-            }
-            1 -> {
-                // Hands high in the air!
-                body = listOf(
-                    Pair(6, 4), Pair(6, 8),
-                    Pair(7, 5), Pair(7, 7),
-                    Pair(8, 5), Pair(8, 6), Pair(8, 7),
-                    Pair(9, 5), Pair(9, 6), Pair(9, 7),
-                    Pair(10, 4), Pair(10, 5), Pair(10, 6), Pair(10, 7), Pair(10, 8),
-                    Pair(11, 5), Pair(11, 7)
-                )
-                eyes = listOf(Pair(8, 6))
-                notes = listOf(Pair(2, 8), Pair(2, 9), Pair(3, 8), Pair(3, 9), Pair(4, 8), Pair(4, 10)) // Note ♫ right
-            }
-            2 -> {
-                // Lean Left & groove
-                body = listOf(
-                    Pair(7, 4), Pair(7, 5),
-                    Pair(8, 3), Pair(8, 4), Pair(8, 5), Pair(8, 6),
-                    Pair(9, 3), Pair(9, 4), Pair(9, 5), Pair(9, 6), Pair(9, 7),
-                    Pair(10, 4), Pair(10, 5), Pair(10, 6), Pair(10, 7),
-                    Pair(11, 3), Pair(11, 4), Pair(11, 7), Pair(11, 8)
-                )
-                eyes = listOf(Pair(8, 5))
-                notes = listOf(Pair(3, 8), Pair(4, 8), Pair(5, 7), Pair(5, 8)) // Note ♪ right
-            }
-            else -> {
-                // Bob Down & stomp feet
-                body = listOf(
-                    Pair(7, 5), Pair(7, 7),
-                    Pair(8, 5), Pair(8, 6), Pair(8, 7),
-                    Pair(9, 4), Pair(9, 5), Pair(9, 6), Pair(9, 7), Pair(9, 8),
-                    Pair(10, 4), Pair(10, 5), Pair(10, 6), Pair(10, 7), Pair(10, 8),
-                    Pair(11, 4), Pair(11, 6), Pair(11, 8)
-                )
-                eyes = listOf(Pair(8, 6))
-                notes = listOf(Pair(3, 4), Pair(3, 5), Pair(4, 4), Pair(4, 5)) // Note ♪ left
-            }
-        }
-
-        for ((r, c) in body) {
+        for ((r, c) in step.body) {
             if (isValidCell(r, c)) grid[r * MATRIX_SIZE + c] = HAMSTER_BRIGHTNESS
         }
-        for ((r, c) in eyes) {
-            grid[r * MATRIX_SIZE + c] = 0
-        }
-        for ((r, c) in notes) {
+        grid[step.eye.first * MATRIX_SIZE + step.eye.second] = 0
+        for ((r, c) in step.notes) {
             if (isValidCell(r, c)) grid[r * MATRIX_SIZE + c] = HAMSTER_BRIGHTNESS
         }
 
@@ -287,5 +313,55 @@ object HamsterFrames13x13 {
             pixels[i] = if (b > 0) Color.argb(255, b, b, b) else Color.TRANSPARENT
         }
         return Bitmap.createBitmap(pixels, MATRIX_SIZE, MATRIX_SIZE, Bitmap.Config.ARGB_8888)
+    }
+
+    /**
+     * Renders the 13×13 Glyph Matrix circle into a crisp Bitmap for the Home Screen & Lock Screen Widget.
+     */
+    fun toWidgetBitmap(frame169: IntArray, sizePx: Int = 280): Bitmap {
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val cx = sizePx / 2f
+        val cy = sizePx / 2f
+
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#0A0A0D")
+            style = Paint.Style.FILL
+        }
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#242429")
+            style = Paint.Style.STROKE
+            strokeWidth = sizePx * 0.015f
+        }
+        canvas.drawCircle(cx, cy, sizePx * 0.48f, bgPaint)
+        canvas.drawCircle(cx, cy, sizePx * 0.48f, borderPaint)
+
+        val gridSpan = sizePx * 0.82f
+        val cellStep = gridSpan / MATRIX_SIZE
+        val gap = cellStep * 0.12f
+        val startX = cx - gridSpan / 2f
+        val startY = cy - gridSpan / 2f
+        val rect = RectF()
+        val ledPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+        }
+
+        for (r in 0 until MATRIX_SIZE) {
+            for (c in 0 until MATRIX_SIZE) {
+                if (!isValidCell(r, c)) continue
+                val left = startX + c * cellStep + gap / 2f
+                val top = startY + r * cellStep + gap / 2f
+                rect.set(left, top, left + cellStep - gap, top + cellStep - gap)
+
+                val b = frame169[r * MATRIX_SIZE + c].coerceIn(0, 255)
+                ledPaint.color = when {
+                    b >= 180 -> Color.WHITE
+                    b > 0 -> Color.parseColor("#42424C")
+                    else -> Color.parseColor("#141419")
+                }
+                canvas.drawRoundRect(rect, 3f, 3f, ledPaint)
+            }
+        }
+        return bmp
     }
 }

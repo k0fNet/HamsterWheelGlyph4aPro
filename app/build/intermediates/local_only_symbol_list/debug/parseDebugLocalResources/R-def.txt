@@ -1,0 +1,9 @@
+R_DEF: Internal format may change without notice
+local
+drawable ic_toy_preview
+id widget_matrix_image
+layout hamster_widget
+string app_name
+string toy_name
+string toy_summary
+xml hamster_widget_info

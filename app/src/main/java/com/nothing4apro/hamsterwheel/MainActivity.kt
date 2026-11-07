@@ -1,6 +1,7 @@
 package com.nothing4apro.hamsterwheel
 
 import android.Manifest
+import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,6 +13,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -22,9 +24,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
-/**
- * Companion UI for Charging Hamster with Dancing Hamster music mode on Nothing Phone (4a) Pro.
- */
 class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
 
     private lateinit var previewView: GlyphMatrixPreviewView
@@ -33,6 +32,8 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
     private lateinit var simulateBtn: Button
     private lateinit var simulateMusicBtn: Button
     private lateinit var musicDanceSwitch: Switch
+    private lateinit var ignoreYoutubeSwitch: Switch
+    private lateinit var grantNotifListenerBtn: Button
     private lateinit var screenOnSwitch: Switch
     private lateinit var onlyChargingSwitch: Switch
 
@@ -52,12 +53,23 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
     override fun onResume() {
         super.onResume()
         HamsterAnimatorEngine.addListener(this)
-        HamsterAnimatorEngine.checkMusicPlaybackState(this)
+        HamsterAnimatorEngine.pollMusicStateSilently(this)
+        updateYoutubePermissionButtonVisibility()
     }
 
     override fun onPause() {
         HamsterAnimatorEngine.removeListener(this)
         super.onPause()
+    }
+
+    private fun updateYoutubePermissionButtonVisibility() {
+        if (!::grantNotifListenerBtn.isInitialized) return
+        val granted = MediaSessionMonitorService.isNotificationListenerGranted(this)
+        grantNotifListenerBtn.visibility = if (HamsterAnimatorEngine.ignoreYoutubeEnabled && !granted) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
     }
 
     override fun onFrameUpdated(
@@ -75,8 +87,8 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
                 !isEnabled -> "Игрушка ВЫКЛЮЧЕНА (матрица свободна для других игрушек)"
                 state == HamsterAnimatorEngine.State.RUNNING -> "Хомячок бежит в колесе ⚡ (${frameDelayMs} мс)"
                 state == HamsterAnimatorEngine.State.WHEEL_LOOP_STOP -> "Зарядка вынута: оборот 360° по часовой стрелке 🎡 (${frameDelayMs} мс)"
-                state == HamsterAnimatorEngine.State.DANCING -> "Играет музыка: хомячок танцует под бит! 🎵 (${frameDelayMs} мс)"
-                else -> "Хомячок спит в колесе 💤 (Частички сна улетают вверх)"
+                state == HamsterAnimatorEngine.State.DANCING -> "Играет музыка: хомячок танцует! 🎵 (${frameDelayMs} мс)"
+                else -> "Хомячок спит в колесе 💤 (${frameDelayMs} мс)"
             }
 
             if (isEnabled) {
@@ -123,7 +135,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         }
         root.addView(previewView)
 
-        // Card 1: Master Info & Power Switch
+        // Card 1: Master Info, Power Switch, Widget Pin & Glyph Settings
         val mainCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = roundedBg("#161618", "#26262A")
@@ -171,6 +183,24 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         }
         mainCard.addView(powerToggleBtn)
 
+        val addWidgetBtn = Button(this).apply {
+            text = "➕ Добавить кружок-виджет на экран"
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            typeface = Typeface.MONOSPACE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            background = roundedBg("#222228", "#3A3A44")
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(10)
+            }
+            setOnClickListener { requestPinHamsterWidget() }
+        }
+        mainCard.addView(addWidgetBtn)
+
         val settingsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
@@ -188,7 +218,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         mainCard.addView(settingsRow)
         root.addView(mainCard)
 
-        // Card 2: Test buttons
+        // Card 2: Interactive Test Controls
         val testCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = roundedBg("#161618", "#26262A")
@@ -261,7 +291,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
                 HamsterAnimatorEngine.setManualOverride(null)
                 HamsterAnimatorEngine.setManualMusicOverride(null)
                 HamsterAnimatorEngine.syncBatteryChargingState(this@MainActivity)
-                HamsterAnimatorEngine.checkMusicPlaybackState(this@MainActivity)
+                HamsterAnimatorEngine.pollMusicStateSilently(this@MainActivity)
                 Toast.makeText(this@MainActivity, "Автоматический режим включен", Toast.LENGTH_SHORT).show()
             }
         }
@@ -293,12 +323,58 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         optionsCard.addView(musicDanceSwitch)
 
         val musicDesc = TextView(this).apply {
-            text = "Когда в любом приложении играет музыка (Spotify, YouTube Music, VK и др.), хомячок танцует с парящими нотами ♪. При подключении зарядки бег в колесе имеет высший приоритет."
+            text = "Хомячок плавно танцует на месте (колесо не крутится), когда играет музыка. Зарядка всегда имеет приоритет."
             setTextColor(Color.parseColor("#8E8E96"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(4), 0, dp(16))
+            setPadding(0, dp(4), 0, dp(14))
         }
         optionsCard.addView(musicDesc)
+
+        ignoreYoutubeSwitch = Switch(this).apply {
+            text = "НЕ РЕАГИРОВАТЬ НА YOUTUBE И ВИДЕО"
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            isChecked = HamsterAnimatorEngine.ignoreYoutubeEnabled
+            setOnCheckedChangeListener { _, isChecked ->
+                HamsterAnimatorEngine.setIgnoreYoutubeEnabled(this@MainActivity, isChecked)
+                updateYoutubePermissionButtonVisibility()
+            }
+        }
+        optionsCard.addView(ignoreYoutubeSwitch)
+
+        val youtubeDesc = TextView(this).apply {
+            text = "Фильтрует активные медиа-сессии: хомячок танцует под Spotify, YouTube Music, Яндекс Музыку и др., но игнорирует ролики в обычном YouTube, TikTok и видеоплеерах."
+            setTextColor(Color.parseColor("#8E8E96"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, dp(4), 0, dp(8))
+        }
+        optionsCard.addView(youtubeDesc)
+
+        grantNotifListenerBtn = Button(this).apply {
+            text = "🔑 Разрешить определение плеера (чтобы отличать YouTube от музыки)"
+            isAllCaps = false
+            setTextColor(Color.parseColor("#FFD60A"))
+            typeface = Typeface.MONOSPACE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            background = roundedBg("#2B2816", "#8A7400")
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(14)
+            }
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                } catch (_: Throwable) {
+                    startActivity(Intent(Settings.ACTION_SETTINGS))
+                }
+            }
+        }
+        optionsCard.addView(grantNotifListenerBtn)
+        updateYoutubePermissionButtonVisibility()
 
         onlyChargingSwitch = Switch(this).apply {
             text = "ONLY SHOW WHILE CHARGING"
@@ -343,6 +419,20 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         root.addView(optionsCard)
         scroll.addView(root)
         return scroll
+    }
+
+    private fun requestPinHamsterWidget() {
+        val mgr = AppWidgetManager.getInstance(this)
+        val provider = ComponentName(this, HamsterWidgetProvider::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && mgr.isRequestPinAppWidgetSupported) {
+            mgr.requestPinAppWidget(provider, null, null)
+        } else {
+            Toast.makeText(
+                this,
+                "Зажмите палец на рабочем столе → Виджеты → Charging Hamster 13×13",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     private fun roundedBg(fillHex: String, strokeHex: String, cornerDp: Int = 18): GradientDrawable {
