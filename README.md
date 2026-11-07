@@ -9,37 +9,6 @@
 
 ---
 
-## Как собрать APK прямо у себя на телефоне (3 способа)
-
-### Способ 1: Локальная сборка на телефоне через **AndroidIDE** (Самый удобный)
-1. Установите **AndroidIDE** (с официального сайта `androidide.com` или GitHub `AndroidIDEOfficial/AndroidIDE`).
-2. Распакуйте архив `HamsterWheelGlyph4aPro.zip` в память телефона (например, в `/sdcard/AndroidIDEProjects/HamsterWheelGlyph4aPro`).
-3. Откройте папку проекта в **AndroidIDE**.
-   - Скрипт `app/build.gradle.kts` автоматически скачает официальную библиотеку `glyph-matrix-sdk-2.0.aar` из репозитория Nothing в папку `app/libs/`.
-4. Нажмите кнопку **Run (▶)** в верхней панели AndroidIDE — приложение соберется и сразу предложит установиться на ваш Nothing Phone (4a) Pro.
-
-### Способ 2: Локальная сборка на телефоне через **Termux**
-1. Откройте **Termux** на телефоне и установите JDK 17 и Gradle:
-   ```bash
-   pkg update && pkg install -y openjdk-17 gradle curl unzip
-   ```
-2. Распакуйте архив проекта и запустите готовый скрипт:
-   ```bash
-   mkdir -p ~/HamsterWheel && cd ~/HamsterWheel
-   unzip /sdcard/Download/HamsterWheelGlyph4aPro.zip
-   chmod +x build_on_phone.sh
-   ./build_on_phone.sh
-   ```
-   *(Если в Termux ещё не установлен Android SDK для ARM64, установите его одной командой из репозитория `lzhiyong/termux-ndk` или используйте Способ 1 / Способ 3).*
-
-### Способ 3: Облачная сборка за 1 минуту прямо из браузера телефона (GitHub Actions — без установки SDK)
-В проект уже встроен готовый пайплайн `.github/workflows/build-apk.yml`:
-1. Зайдите с телефона на [github.com/new](https://github.com/new) и создайте репозиторий.
-2. Загрузите файлы из архива `HamsterWheelGlyph4aPro.zip` (через кнопку *Upload files*).
-3. Перейдите на вкладку **Actions** → выберите **Build Nothing 4a Pro Hamster APK** → через ~1.5 минуты скачайте готовый `HamsterWheel-Nothing4aPro-debug-apk` и установите его на телефон!
-
----
-
 ## Как активировать игрушку на Nothing Phone (4a) Pro
 
 1. Откройте установленное приложение **Hamster Glyph 4a Pro** — оно сразу запустит фоновую службу для работы при включенном экране.
