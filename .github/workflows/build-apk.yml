@@ -19,6 +19,7 @@ jobs:
 
       - name: Auto-Unpack ZIP & Commit Clean Project Structure
         run: |
+          cp .github/workflows/build-apk.yml /tmp/current-workflow.yml
           ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
           if [ -n "$ZIP_FILE" ]; then
             echo "Найден архив $ZIP_FILE — распаковываем в корень репозитория..."
@@ -30,6 +31,7 @@ jobs:
             fi
             rm -f "$ZIP_FILE"
           fi
+          cp /tmp/current-workflow.yml .github/workflows/build-apk.yml
 
           # Авто-фикс AndroidManifest.xml (для AGP 8+)
           sed -i 's/package="com.nothing4apro.hamsterwheel"//g' app/src/main/AndroidManifest.xml
@@ -41,14 +43,13 @@ jobs:
             fi
           done
 
-          # Сохраняем распакованные файлы обратно в репозиторий, чтобы больше не возиться с ZIP
+          # Сохраняем распакованные файлы обратно в репозиторий (не трогая папку .github)
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: auto-unpack project structure [skip ci]"
-            git push
-          fi
+          git checkout -- .github
+          git add --all -- ':!.github'
+          git commit -m "chore: auto-unpack project structure [skip ci]" || true
+          git push || echo "Продолжаем сборку APK..."
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -75,6 +76,7 @@ jobs:
           path: HamsterWheel-Nothing4aPro.apk
 
       - name: Publish Direct APK to GitHub Releases
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
