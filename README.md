@@ -1,27 +1,48 @@
-# Charging Hamster для Nothing Phone (4a) Pro
+<p align="center">
+  <img src="assets/banner.svg" alt="Charging Hamster — Nothing Phone (4a) Pro" width="100%"/>
+</p>
 
-Кастомная игрушка (Glyph Toy) и виджет с хомячком в колесе, написанные специально под круглую матрицу **Nothing Phone (4a) Pro** (`13×13`, 137 светодиодов).
+A custom Glyph Matrix toy and home/lock screen widget built specifically for the **Nothing Phone (4a) Pro** (`13×13` grid, 137 mini-LEDs).
 
-У обычного Nothing Phone (3) матрица больше (`25×25`), поэтому большинство готовых игрушек на 4a Pro либо не запускаются, либо режут картинку. Здесь вся графика изначально нарисована попиксельно под физическую маску 4a Pro, а само приложение умеет держать анимацию включенной даже тогда, когда вы разблокируете экран.
+Most third-party Glyph toys target the larger `25×25` matrix on the Phone (3), which means they either refuse to load on the 4a Pro or crop the animation. Every frame in this project is hand-drawn for the 4a Pro's circular 137-LED mask (`[5, 9, 11, 11, 13, 13, 13, 13, 13, 11, 11, 9, 5]`), and the app can keep the matrix alive even while your screen is unlocked.
 
-## Что делает хомяк
+<br/>
 
-* **Спит по умолчанию** — пока телефон лежит без зарядки, хомяк свернулся калачиком на дне колеса, а вверх от него медленно улетают одиночные пиксели сна.
-* **Бежит на зарядке** — стоит воткнуть кабель (или положить телефон на беспроводную зарядку), хомяк сразу просыпается и крутит колесо.
-* **Проезжает круг по инерции при отключении провода** — когда вынимаешь зарядку, колесо останавливается не мгновенно: хомяк «прилипает» к ободу, делает вместе с ним один плавный оборот по часовой стрелке и только после этого ложится спать.
-* **Танцует под музыку** — если на телефоне играет музыка (Spotify, YouTube Music, Яндекс Музыка и т.д.), хомяк начинает пританцовывать на месте под бит, а над ним взлетают нотки. Колесо при этом стоит на месте. Обычный YouTube, TikTok и видеоплееры игнорируются, чтобы он не танцевал под разговорные ролики. Если во время музыки поставить телефон на зарядку, приоритет всегда у бега в колесе.
-* **Виджет на рабочий стол и экран блокировки** — в комплекте есть круглый виджет, который в реальном времени повторяет всё, что происходит на задней крышке.
+<p align="center">
+  <img src="assets/section_behaviors.svg" alt="Behaviors" width="100%"/>
+</p>
 
-## Как установить и включить
+| State | Trigger | What happens on the 13×13 matrix |
+| :--- | :--- | :--- |
+| **Sleeping** | Idle / unplugged | The hamster curls up at the bottom of the wheel while single-pixel sleep particles drift up and off the top edge over a seamless 30-second loop. |
+| **Running** | Charger connected | As soon as power is plugged in, the hamster wakes up and sprints forward, pushing the wheel spokes clockwise under its paws. |
+| **Wheel Spin Stop** | Charger unplugged | When you unplug the cable, momentum carries the hamster around the inside of the wheel for one full 360° turn before it settles back down to sleep. |
+| **Dancing** | Music playing | When audio plays in a music app, the wheel stays still and the hamster bobs left and right to the beat with floating musical notes. Charging always takes priority over music. |
 
-1. Скачайте готовый `HamsterWheel-Nothing4aPro.apk` из раздела **Releases** (или соберите через вкладку **Actions**).
-2. Откройте приложение и нажмите **«Edit in Glyph settings»** (либо зайдите в *Настройки → Glyph Interface → Always-on Glyph Toy*) и выберите **Hamster Wheel (4a Pro)**.
-3. Чтобы хомяк отличал музыкальные плееры от обычного YouTube, нажмите в приложении желтую кнопку разрешения доступа к уведомлениям (это нужно системе Android для чтения `MediaSession` активного плеера).
-4. Если нужно временно освободить матрицу для другой игрушки, просто нажмите **«Выключить игрушку»** на главном экране приложения или в шторке.
+<br/>
 
-## Сборка
+<p align="center">
+  <img src="assets/section_features.svg" alt="Features" width="100%"/>
+</p>
 
-Проект собирается стандартным Gradle (JDK 17, Android SDK 34). Официальная библиотека `glyph-matrix-sdk-2.0.aar` подтягивается из репозитория Nothing автоматически при старте сборки:
+* **Stays on with the screen** — standard AOD toys on Nothing OS turn off the moment you wake the display. This app bridges `HamsterToyService` (`setMatrixFrame`) and `setAppMatrixFrame` so the animation never cuts out when you unlock your phone.
+* **Smart YouTube & video filter** — checks active `MediaSession` package names so the hamster dances to Spotify, YouTube Music, Apple Music, or Yandex Music, but stays asleep when you're watching regular YouTube, TikTok, Twitch, or video players. You can also exclude any installed app from the settings card.
+* **Zero notification clutter** — runs silently through the bound Glyph Toy service without sitting in your notification shade.
+* **Matching 13×13 Widget** — includes a circular home/lock screen widget that mirrors whatever the hamster is doing on the back of the phone.
+
+<br/>
+
+<p align="center">
+  <img src="assets/section_install.svg" alt="Setup and Build" width="100%"/>
+</p>
+
+### Install from Releases
+1. Grab the latest `HamsterWheel-Nothing4aPro-v*.apk` from the [**Releases**](../../releases) page and install it.
+2. Open **Charging Hamster** and tap **Edit in Glyph settings** (or go to *Settings → Glyph Interface → Always-on Glyph Toy*) and select **Charging Hamster**.
+3. Tap **Grant media access** inside the app if you want it to filter out YouTube and custom excluded apps during music playback.
+
+### Build from source
+Requires JDK 17 and Android SDK 34. The Gradle script automatically downloads the official `glyph-matrix-sdk-2.0.aar` from Nothing's repository into `app/libs/` before compiling:
 
 ```bash
 ./gradlew assembleDebug

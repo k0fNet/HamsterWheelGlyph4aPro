@@ -16,12 +16,6 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
-/**
- * Optional Foreground Service for keeping the animation alive when the Toy is not bound by Nothing OS
- * or when screen-on persistence without AOD is requested.
- * Uses IMPORTANCE_MIN so it never shows an annoying icon in the status bar, and can be disabled
- * completely in the app settings.
- */
 class HamsterForegroundService : Service() {
 
     companion object {
@@ -33,7 +27,6 @@ class HamsterForegroundService : Service() {
             HamsterAnimatorEngine.loadPrefs(context)
             if (!HamsterAnimatorEngine.isGlyphEnabled) return
             if (!HamsterAnimatorEngine.foregroundNotificationEnabled) {
-                // Run directly in-process (bound via HamsterToyService) without posting a ForegroundService notification!
                 HamsterAnimatorEngine.start(context)
                 return
             }
@@ -157,10 +150,10 @@ class HamsterForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Charging Hamster (Тихий фоновый режим)",
+                "Charging Hamster Background Service",
                 NotificationManager.IMPORTANCE_MIN
             ).apply {
-                description = "Минимальное уведомление фоновой службы (можно отключить в приложении)"
+                description = "Silent background status for the 13×13 Glyph Matrix toy"
                 setShowBadge(false)
                 setSound(null, null)
                 enableVibration(false)
@@ -186,12 +179,12 @@ class HamsterForegroundService : Service() {
         )
 
         val statusText = when (HamsterAnimatorEngine.currentState) {
-            HamsterAnimatorEngine.State.RUNNING -> "Хомячок бежит в колесе (Зарядка)"
-            HamsterAnimatorEngine.State.WHEEL_LOOP_STOP -> "Хомячок делает оборот на колесе..."
-            HamsterAnimatorEngine.State.DANCING -> "Хомячок танцует под музыку"
-            HamsterAnimatorEngine.State.SLEEPING -> "Хомячок спит в колесе"
-            HamsterAnimatorEngine.State.DISABLED -> "Отключено"
-            else -> "Активно"
+            HamsterAnimatorEngine.State.RUNNING -> "Hamster is running in the wheel (Charging)"
+            HamsterAnimatorEngine.State.WHEEL_LOOP_STOP -> "Wheel is coasting to a stop..."
+            HamsterAnimatorEngine.State.DANCING -> "Hamster is dancing to music"
+            HamsterAnimatorEngine.State.SLEEPING -> "Hamster is sleeping in the wheel"
+            HamsterAnimatorEngine.State.DISABLED -> "Disabled"
+            else -> "Active"
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
@@ -202,7 +195,7 @@ class HamsterForegroundService : Service() {
             .setOngoing(true)
             .setSilent(true)
             .setContentIntent(pendingOpen)
-            .addAction(0, "Выключить", pendingStop)
+            .addAction(0, "Turn Off", pendingStop)
             .build()
     }
 

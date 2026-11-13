@@ -29,12 +29,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 /**
- * Nothing OS styled companion UI modeled directly on the reference "CHARGING HAMSTER" screenshots:
- * - Authentic 5×7 dot-matrix headings (DotMatrixTextView)
- * - Clean dark #161618 rounded cards (24dp radius)
- * - Pill-shaped buttons ("Edit in Glyph settings", "Add Widget", "Excluded Apps")
- * - Zero annoying notifications by default (toggleable in settings)
- * - Built-in App Exclusion Manager to block any specific app from triggering the music dance
+ * Nothing OS companion UI for Charging Hamster (100% English, auto-fitting dot-matrix typography).
  */
 class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
 
@@ -88,9 +83,9 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         val custom = MediaSessionMonitorService.getCustomIgnoredPackages(this)
         val totalDefault = MediaSessionMonitorService.DEFAULT_IGNORED_PACKAGES.size
         excludedCountText.text = if (custom.isEmpty()) {
-            "В списке исключений: YouTube, TikTok, Twitch и еще $totalDefault видеоплееров. Нажмите «Настроить исключения», чтобы добавить любое свое приложение."
+            "Ignored by default: YouTube, TikTok, Twitch, Instagram, and $totalDefault video players. Tap 'Excluded apps (+)' to block any other app."
         } else {
-            "Исключено по умолчанию ($totalDefault) + ваши приложения (${custom.size}): ${custom.joinToString(", ")}"
+            "Ignored by default ($totalDefault) + custom (${custom.size}): ${custom.joinToString(", ")}"
         }
     }
 
@@ -140,7 +135,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
             setPadding(dp(16), dp(20), dp(16), dp(32))
         }
 
-        // 1. Top Nothing OS "WIDGETS   TOYS" header bar
+        // 1. Top Nothing OS "WIDGETS   TOYS" header bar (with generous width so "TOYS" is never clipped)
         val topTabsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
@@ -156,9 +151,9 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         val widgetsTab = DotMatrixTextView(this).apply {
             text = "WIDGETS"
             dotColor = Color.parseColor("#63636A")
-            dotDiameterPx = dpF(2.2f)
-            dotGapPx = dpF(0.9f)
-            setPadding(0, dp(4), dp(22), dp(6))
+            dotDiameterPx = dpF(2.1f)
+            dotGapPx = dpF(0.85f)
+            setPadding(dp(2), dp(4), dp(24), dp(6))
             setOnClickListener { requestPinHamsterWidget() }
         }
         topTabsRow.addView(widgetsTab)
@@ -166,18 +161,25 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         val toysTabCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
         val toysTab = DotMatrixTextView(this).apply {
             text = "TOYS"
             dotColor = Color.WHITE
-            dotDiameterPx = dpF(2.2f)
-            dotGapPx = dpF(0.9f)
-            setPadding(0, dp(4), 0, dp(6))
+            dotDiameterPx = dpF(2.1f)
+            dotGapPx = dpF(0.85f)
+            setPadding(dp(4), dp(4), dp(4), dp(6))
         }
         toysTabCol.addView(toysTab)
         val underline = View(this).apply {
             setBackgroundColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(dp(44), dp(2))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(2)
+            )
         }
         toysTabCol.addView(underline)
         topTabsRow.addView(toysTabCol)
@@ -192,14 +194,18 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         }
         root.addView(previewView)
 
-        // 3. Card 1: CHARGING HAMSTER Title Card (matches screenshot 1:1)
+        // 3. Card 1: CHARGING HAMSTER Title Card
         val heroCard = createNothingCard()
         val dotTitle = DotMatrixTextView(this).apply {
             text = "CHARGING HAMSTER"
             dotColor = Color.WHITE
-            dotDiameterPx = dpF(2.5f)
-            dotGapPx = dpF(1.0f)
+            dotDiameterPx = dpF(2.4f)
+            dotGapPx = dpF(0.95f)
             setPadding(0, 0, 0, dp(10))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
         heroCard.addView(dotTitle)
 
@@ -258,7 +264,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         heroCard.addView(heroBtnRow)
         root.addView(heroCard)
 
-        // 4. Card 2: ONLY SHOW WHILE CHARGING (matches screenshot 1:1)
+        // 4. Card 2: ONLY SHOW WHILE CHARGING
         val onlyChargingCard = createNothingCard()
         onlyChargingCard.addView(
             createDotMatrixSwitchRow(
@@ -365,7 +371,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         musicCard.addView(exclusionBtnRow)
         root.addView(musicCard)
 
-        // 6. Card 4: SCREEN-ON & SILENT MODE (No annoying notifications!)
+        // 6. Card 4: SCREEN-ON & SILENT MODE
         val systemCard = createNothingCard()
         systemCard.addView(
             createDotMatrixSwitchRow(
@@ -403,14 +409,18 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         systemCard.addView(notifDesc)
         root.addView(systemCard)
 
-        // 7. Card 5: QUICK PREVIEW & WIDGET TOOLS
+        // 7. Card 5: PREVIEW & WIDGET TOOLS
         val toolsCard = createNothingCard()
         val toolsHeader = DotMatrixTextView(this).apply {
             text = "PREVIEW AND WIDGET"
             dotColor = Color.WHITE
-            dotDiameterPx = dpF(2.1f)
-            dotGapPx = dpF(0.85f)
+            dotDiameterPx = dpF(2.0f)
+            dotGapPx = dpF(0.8f)
             setPadding(0, 0, 0, dp(14))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
         toolsCard.addView(toolsHeader)
 
@@ -544,8 +554,9 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         val labelView = DotMatrixTextView(this).apply {
             text = dotLabel
             dotColor = Color.WHITE
-            dotDiameterPx = dpF(2.1f)
-            dotGapPx = dpF(0.85f)
+            dotDiameterPx = dpF(2.0f)
+            dotGapPx = dpF(0.8f)
+            setPadding(0, dp(2), dp(14), dp(2))
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         row.addView(labelView)
@@ -558,16 +569,11 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         return row
     }
 
-    /**
-     * Shows a dialog where the user can pick any installed app on their phone (or type a package name)
-     * to exclude it from triggering the dancing hamster animation.
-     */
     private fun showExcludedAppsDialog() {
         val pm = packageManager
         val installedApps = try {
             pm.getInstalledApplications(PackageManager.GET_META_DATA)
                 .filter { app ->
-                    // Show user-installed apps and media/launchable system apps
                     (app.flags and ApplicationInfo.FLAG_SYSTEM) == 0 ||
                             pm.getLaunchIntentForPackage(app.packageName) != null
                 }
@@ -590,7 +596,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
             }
 
             AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Исключения для танца под музыку")
+                .setTitle("Excluded Apps for Music Dance")
                 .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
                     val pkg = installedApps[which].second
                     if (isChecked) {
@@ -599,16 +605,16 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
                         currentExcluded.remove(pkg)
                     }
                 }
-                .setPositiveButton("Сохранить") { _, _ ->
+                .setPositiveButton("Save") { _, _ ->
                     MediaSessionMonitorService.setCustomIgnoredPackages(this, currentExcluded)
                     HamsterAnimatorEngine.pollMusicStateSilently(this)
                     updateExcludedAppsSummary()
-                    Toast.makeText(this, "Список исключений сохранен", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Excluded apps updated", Toast.LENGTH_SHORT).show()
                 }
-                .setNeutralButton("Ввести пакет вручную") { _, _ ->
+                .setNeutralButton("Add package manually") { _, _ ->
                     showManualPackageInputDialog()
                 }
-                .setNegativeButton("Отмена", null)
+                .setNegativeButton("Cancel", null)
                 .show()
         } else {
             showManualPackageInputDialog()
@@ -617,14 +623,14 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
 
     private fun showManualPackageInputDialog() {
         val input = EditText(this).apply {
-            hint = "Например: org.telegram.messenger"
+            hint = "e.g. org.telegram.messenger"
             inputType = InputType.TYPE_CLASS_TEXT
             setText(MediaSessionMonitorService.getCustomIgnoredPackages(this@MainActivity).joinToString(", "))
         }
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Пакеты-исключения (через запятую)")
+            .setTitle("Excluded Packages (comma-separated)")
             .setView(input)
-            .setPositiveButton("Сохранить") { _, _ ->
+            .setPositiveButton("Save") { _, _ ->
                 val raw = input.text.toString()
                 val pkgs = raw.split(",", ";", " ", "\n")
                     .map { it.trim().lowercase() }
@@ -634,7 +640,7 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
                 HamsterAnimatorEngine.pollMusicStateSilently(this)
                 updateExcludedAppsSummary()
             }
-            .setNegativeButton("Отмена", null)
+            .setNegativeButton("Cancel", null)
             .show()
     }
 

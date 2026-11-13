@@ -6,10 +6,11 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
+import kotlin.math.min
 
 /**
- * Renders authentic 5×7 Nothing OS Dot-Matrix pixel typography (like "CHARGING HAMSTER"
- * and "WIDGETS  TOYS" in the reference screenshots).
+ * Renders authentic 5×7 Nothing OS Dot-Matrix pixel typography with automatic width-fitting
+ * so long headings never clip against switches or card edges.
  */
 class DotMatrixTextView @JvmOverloads constructor(
     context: Context,
@@ -50,7 +51,6 @@ class DotMatrixTextView @JvmOverloads constructor(
     }
 
     companion object {
-        // 5x7 dot-matrix font bitmap rows (5 bits wide, 7 rows tall)
         private val GLYPHS: Map<Char, IntArray> = mapOf(
             'A' to intArrayOf(0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001),
             'B' to intArrayOf(0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110),
@@ -90,22 +90,35 @@ class DotMatrixTextView @JvmOverloads constructor(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val step = dotDiameterPx + dotGapPx
-        val charWidth = 5 * step + step
-        val totalW = (text.length * charWidth).toInt() + paddingLeft + paddingRight
-        val totalH = (7 * step).toInt() + paddingTop + paddingBottom
-        setMeasuredDimension(
-            resolveSize(totalW, widthMeasureSpec),
-            resolveSize(totalH, heightMeasureSpec)
-        )
+        val baseStep = dotDiameterPx + dotGapPx
+        val totalCols = if (text.isEmpty()) 1 else (text.length * 6 - 1)
+        val desiredW = (totalCols * baseStep + paddingLeft + paddingRight + 4f).toInt()
+        val resolvedW = resolveSize(desiredW, widthMeasureSpec)
+
+        val availW = (resolvedW - paddingLeft - paddingRight).coerceAtLeast(1)
+        val effectiveStep = min(baseStep, availW.toFloat() / totalCols.toFloat())
+        val desiredH = (7 * effectiveStep + paddingTop + paddingBottom + 4f).toInt()
+        val resolvedH = resolveSize(desiredH, heightMeasureSpec)
+
+        setMeasuredDimension(resolvedW, resolvedH)
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val step = dotDiameterPx + dotGapPx
-        val radius = dotDiameterPx / 2f
+        if (text.isEmpty()) return
+
+        val baseStep = dotDiameterPx + dotGapPx
+        val totalCols = (text.length * 6 - 1).coerceAtLeast(1)
+        val availW = (width - paddingLeft - paddingRight).coerceAtLeast(1)
+
+        // Automatically scale down step & dot radius if the available width is narrower than baseStep
+        val step = min(baseStep, availW.toFloat() / totalCols.toFloat())
+        val scale = step / baseStep
+        val radius = (dotDiameterPx * scale) / 2f
+
+        val textHeight = 7 * step
+        val startY = paddingTop + ((height - paddingTop - paddingBottom - textHeight) / 2f).coerceAtLeast(0f)
         var cursorX = paddingLeft.toFloat()
-        val startY = paddingTop.toFloat()
 
         for (ch in text) {
             val rows = GLYPHS[ch] ?: GLYPHS[' ']!!
