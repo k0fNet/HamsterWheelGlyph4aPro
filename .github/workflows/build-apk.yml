@@ -34,6 +34,14 @@ jobs:
           cp /tmp/current-workflow.yml .github/workflows/build-apk.yml
           sed -i 's/package="com.nothing4apro.hamsterwheel"//g' app/src/main/AndroidManifest.xml
 
+      - name: Extract App Version from build.gradle.kts
+        id: app_version
+        run: |
+          VER=$(grep 'versionName =' app/build.gradle.kts | cut -d'"' -f2)
+          if [ -z "$VER" ]; then VER="1.5.0"; fi
+          echo "version=$VER" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VER"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -50,31 +58,35 @@ jobs:
           curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d /tmp
           /tmp/gradle-8.7/bin/gradle assembleDebug --no-daemon --stacktrace
-          cp app/build/outputs/apk/debug/app-debug.apk HamsterWheel-Nothing4aPro.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "HamsterWheel-Nothing4aPro-v${{ steps.app_version.outputs.version }}.apk"
 
       - name: Commit Unpacked Files to Repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -- .github
-          git add --all -- ':!.github' ':!app/libs' ':!HamsterWheel-Nothing4aPro.apk'
+          git add --all -- ':!.github' ':!app/libs' ':!*.apk'
           git commit -m "chore: update unpacked project files [skip ci]" || true
           git push || true
 
-      - name: Publish Direct APK to GitHub Releases
+      - name: Clean Old 'latest' Tag & Recreate Fresh Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Удаляем старый релиз 'latest' недельной давности и предыдущий релиз с тем же тегом, чтобы дата всегда была свежей ("now")
+          gh release delete latest --cleanup-tag --yes || true
+          gh release delete "v${{ steps.app_version.outputs.version }}" --cleanup-tag --yes || true
+
+      - name: Publish Fresh Versioned Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
+          tag_name: "v${{ steps.app_version.outputs.version }}"
           target_commitish: main
-          name: "Charging Hamster 4a Pro (Latest APK)"
-          body: "Готовый APK для установки в 1 нажатие с телефона."
-          files: HamsterWheel-Nothing4aPro.apk
+          name: "Charging Hamster v${{ steps.app_version.outputs.version }} (Build #${{ github.run_number }})"
+          body: "Готовый APK версии v${{ steps.app_version.outputs.version }} для установки в 1 нажатие с телефона."
+          files: "HamsterWheel-Nothing4aPro-v${{ steps.app_version.outputs.version }}.apk"
+          make_latest: true
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload APK to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: HamsterWheel-Nothing4aPro-APK
-          path: HamsterWheel-Nothing4aPro.apk
+          
