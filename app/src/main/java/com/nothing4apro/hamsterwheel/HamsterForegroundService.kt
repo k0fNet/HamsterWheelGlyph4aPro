@@ -17,30 +17,43 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 /**
- * Foreground Service that keeps the 13×13 Charging Hamster animation running when the screen
- * is turned ON and listens for real-time USB/wireless charging connect & disconnect events.
+ * Optional Foreground Service for keeping the animation alive when the Toy is not bound by Nothing OS
+ * or when screen-on persistence without AOD is requested.
+ * Uses IMPORTANCE_MIN so it never shows an annoying icon in the status bar, and can be disabled
+ * completely in the app settings.
  */
 class HamsterForegroundService : Service() {
 
     companion object {
-        private const val CHANNEL_ID = "hamster_glyph_channel"
+        const val CHANNEL_ID = "hamster_glyph_silent_channel"
         private const val NOTIFICATION_ID = 4041
         const val ACTION_STOP_SERVICE = "com.nothing4apro.hamsterwheel.STOP_SERVICE"
 
         fun startService(context: Context) {
             HamsterAnimatorEngine.loadPrefs(context)
             if (!HamsterAnimatorEngine.isGlyphEnabled) return
+            if (!HamsterAnimatorEngine.foregroundNotificationEnabled) {
+                // Run directly in-process (bound via HamsterToyService) without posting a ForegroundService notification!
+                HamsterAnimatorEngine.start(context)
+                return
+            }
             val intent = Intent(context, HamsterForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Throwable) {
+                HamsterAnimatorEngine.start(context)
             }
         }
 
         fun stopService(context: Context) {
-            val intent = Intent(context, HamsterForegroundService::class.java)
-            context.stopService(intent)
+            try {
+                val intent = Intent(context, HamsterForegroundService::class.java)
+                context.stopService(intent)
+            } catch (_: Throwable) {}
         }
     }
 
@@ -110,14 +123,13 @@ class HamsterForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_SERVICE) {
-            // Turn off the Glyph toy completely and release the matrix for other toys
             HamsterAnimatorEngine.setGlyphEnabled(applicationContext, false)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
         HamsterAnimatorEngine.loadPrefs(applicationContext)
-        if (!HamsterAnimatorEngine.isGlyphEnabled) {
+        if (!HamsterAnimatorEngine.isGlyphEnabled || !HamsterAnimatorEngine.foregroundNotificationEnabled) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
@@ -145,11 +157,13 @@ class HamsterForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Charging Hamster Glyph Service",
-                NotificationManager.IMPORTANCE_LOW
+                "Charging Hamster (Тихий фоновый режим)",
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
-                description = "Фоновая работа Charging Hamster на матрице 13×13"
+                description = "Минимальное уведомление фоновой службы (можно отключить в приложении)"
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
             }
             val nm = getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(channel)
@@ -174,24 +188,26 @@ class HamsterForegroundService : Service() {
         val statusText = when (HamsterAnimatorEngine.currentState) {
             HamsterAnimatorEngine.State.RUNNING -> "Хомячок бежит в колесе (Зарядка)"
             HamsterAnimatorEngine.State.WHEEL_LOOP_STOP -> "Хомячок делает оборот на колесе..."
-            HamsterAnimatorEngine.State.DANCING -> "Хомячок танцует под музыку 🎵"
+            HamsterAnimatorEngine.State.DANCING -> "Хомячок танцует под музыку"
             HamsterAnimatorEngine.State.SLEEPING -> "Хомячок спит в колесе"
             HamsterAnimatorEngine.State.DISABLED -> "Отключено"
-            else -> "Хомячок в колесе"
+            else -> "Активно"
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_toy_preview)
-            .setContentTitle("Charging Hamster · 13×13")
+            .setContentTitle("Charging Hamster")
             .setContentText(statusText)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .setSilent(true)
             .setContentIntent(pendingOpen)
-            .addAction(0, "Выключить игрушку", pendingStop)
+            .addAction(0, "Выключить", pendingStop)
             .build()
     }
 
     private fun updateNotification() {
+        if (!HamsterAnimatorEngine.foregroundNotificationEnabled) return
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(NOTIFICATION_ID, buildNotification())
     }

@@ -46,8 +46,13 @@ object HamsterFrames13x13 {
 
     private val RIM_SET: Set<Pair<Int, Int>> = RIM_COORDS.toSet()
 
-    private val SPOKE_PHASES_CW: Array<List<Pair<Int, Int>>> = arrayOf(
-        // Phase 0: 45° diagonal X-spokes
+    /**
+     * Exact 4 wheel spoke states ordered so that as the hamster runs forward (facing right),
+     * its paws push the bottom spokes from RIGHT to LEFT (`col 10 -> col 8 -> col 6 -> col 4 -> col 2`),
+     * while the top spokes move from LEFT to RIGHT (`col 2 -> col 4 -> col 6 -> col 8 -> col 10`).
+     */
+    private val SPOKE_PHASES_FORWARD: Array<List<Pair<Int, Int>>> = arrayOf(
+        // Phase 0: 45° diagonal X-spokes (bottom spokes at col 2 and col 10)
         listOf(
             Pair(2, 2), Pair(3, 3), Pair(4, 4), Pair(5, 5),
             Pair(2, 10), Pair(3, 9), Pair(4, 8), Pair(5, 7),
@@ -55,15 +60,15 @@ object HamsterFrames13x13 {
             Pair(7, 5), Pair(8, 4), Pair(9, 3), Pair(10, 2),
             Pair(7, 7), Pair(8, 8), Pair(9, 9), Pair(10, 10)
         ),
-        // Phase 1: Clockwise +22.5°
+        // Phase 1: Bottom spoke pushed left to col 8, top spoke moved right to col 4 (Screenshot 3)
         listOf(
-            Pair(1, 8), Pair(2, 8), Pair(3, 7), Pair(4, 7), Pair(5, 7),
-            Pair(4, 1), Pair(4, 2), Pair(5, 3), Pair(5, 4), Pair(5, 5),
-            Pair(6, 5), Pair(6, 6), Pair(6, 7),
-            Pair(7, 6), Pair(8, 5), Pair(9, 5), Pair(10, 4), Pair(11, 4),
-            Pair(7, 8), Pair(7, 9), Pair(8, 10), Pair(8, 11)
+            Pair(1, 4), Pair(2, 4), Pair(3, 5), Pair(4, 5), Pair(5, 5),
+            Pair(4, 10), Pair(4, 11), Pair(5, 7), Pair(5, 8), Pair(5, 9),
+            Pair(6, 6),
+            Pair(7, 3), Pair(7, 4), Pair(7, 5), Pair(8, 1), Pair(8, 2),
+            Pair(7, 7), Pair(8, 7), Pair(9, 8), Pair(10, 8), Pair(11, 8)
         ),
-        // Phase 2: Clockwise +45° (90° '+' cross)
+        // Phase 2: Bottom spoke pushed left to col 6, top spoke moved right to col 6 ('+' cross)
         listOf(
             Pair(1, 6), Pair(2, 6), Pair(3, 6), Pair(4, 6), Pair(5, 6),
             Pair(6, 1), Pair(6, 2), Pair(6, 3), Pair(6, 4), Pair(6, 5),
@@ -71,13 +76,13 @@ object HamsterFrames13x13 {
             Pair(6, 7), Pair(6, 8), Pair(6, 9), Pair(6, 10), Pair(6, 11),
             Pair(7, 6), Pair(8, 6), Pair(9, 6), Pair(10, 6), Pair(11, 6)
         ),
-        // Phase 3: Clockwise +67.5°
+        // Phase 3: Bottom spoke pushed left to col 4, top spoke moved right to col 8 (Screenshot 4)
         listOf(
-            Pair(1, 4), Pair(2, 4), Pair(3, 5), Pair(4, 5), Pair(5, 5),
-            Pair(4, 10), Pair(4, 11), Pair(5, 7), Pair(5, 8), Pair(5, 9),
-            Pair(6, 6),
-            Pair(7, 3), Pair(7, 4), Pair(7, 5), Pair(8, 1), Pair(8, 2),
-            Pair(7, 7), Pair(8, 7), Pair(9, 8), Pair(10, 8), Pair(11, 8)
+            Pair(1, 8), Pair(2, 8), Pair(3, 7), Pair(4, 7), Pair(5, 7),
+            Pair(4, 1), Pair(4, 2), Pair(5, 3), Pair(5, 4), Pair(5, 5),
+            Pair(6, 5), Pair(6, 6), Pair(6, 7),
+            Pair(7, 6), Pair(8, 5), Pair(9, 5), Pair(10, 4), Pair(11, 4),
+            Pair(7, 8), Pair(7, 9), Pair(8, 10), Pair(8, 11)
         )
     )
 
@@ -87,99 +92,83 @@ object HamsterFrames13x13 {
         val notes: List<Pair<Int, Int>>
     )
 
-    // 16-frame smooth chubby hamster dance on a stationary wheel (no rabbit ears, no wheel rotation!)
+    // 16-frame smooth chubby hamster dance on a stationary wheel
     private val DANCE_STEPS_16: Array<DanceStep> = arrayOf(
-        // 0: Facing right, upright, ear (8,6), eye (9,7), note spawns on right (r=6)
         DanceStep(
             body = listOf(Pair(8,6), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
             eye = Pair(9,7),
             notes = listOf(Pair(6,9), Pair(6,10), Pair(7,9))
         ),
-        // 1: Beat squish right (chubby cheeks!), right paw taps up (10,9), note rises to r=5
         DanceStep(
             body = listOf(Pair(8,7), Pair(9,4),Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8),Pair(10,9), Pair(11,4),Pair(11,7)),
             eye = Pair(9,7),
             notes = listOf(Pair(5,9), Pair(5,10), Pair(6,9))
         ),
-        // 2: Bounce up facing right, ear (8,7), note rises to r=4
         DanceStep(
             body = listOf(Pair(8,7), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,5),Pair(11,8)),
             eye = Pair(9,7),
             notes = listOf(Pair(4,9), Pair(4,10), Pair(5,9))
         ),
-        // 3: Smooth center turn (chubby round dome), note rises to r=3
         DanceStep(
             body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,5),Pair(11,7),Pair(11,8)),
             eye = Pair(9,6),
             notes = listOf(Pair(3,9), Pair(3,10), Pair(4,9))
         ),
-        // 4: Facing left! Ear (8,6), eye (9,5), snout (9,4), note spawns on left (r=6)
         DanceStep(
             body = listOf(Pair(8,6), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
             eye = Pair(9,5),
             notes = listOf(Pair(2,9), Pair(6,3), Pair(6,4), Pair(7,4))
         ),
-        // 5: Beat squish left (chubby cheeks!), left paw taps up (10,3), note rises to r=5
         DanceStep(
             body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7),Pair(9,8), Pair(10,3),Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,5),Pair(11,8)),
             eye = Pair(9,5),
             notes = listOf(Pair(5,3), Pair(5,4), Pair(6,4))
         ),
-        // 6: Bounce up facing left, ear (8,5), note rises to r=4
         DanceStep(
             body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,7)),
             eye = Pair(9,5),
             notes = listOf(Pair(4,3), Pair(4,4), Pair(5,4))
         ),
-        // 7: Smooth center turn, note rises to r=3
         DanceStep(
             body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,5),Pair(11,7),Pair(11,8)),
             eye = Pair(9,6),
             notes = listOf(Pair(3,3), Pair(3,4), Pair(4,4))
         ),
-        // 8: Groove right 2, double-beat note trail
         DanceStep(
             body = listOf(Pair(8,6), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
             eye = Pair(9,7),
             notes = listOf(Pair(2,3), Pair(6,8), Pair(5,9))
         ),
-        // 9: Happy hop right (paws tucked, chubby body)
         DanceStep(
             body = listOf(Pair(8,7), Pair(9,4),Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8),Pair(10,9), Pair(11,5),Pair(11,7)),
             eye = Pair(9,7),
             notes = listOf(Pair(5,8), Pair(4,9))
         ),
-        // 10: Land right (paws wide)
         DanceStep(
             body = listOf(Pair(8,7), Pair(9,5),Pair(9,6),Pair(9,8), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,3),Pair(11,8)),
             eye = Pair(9,7),
             notes = listOf(Pair(4,8), Pair(3,9))
         ),
-        // 11: Center groove
         DanceStep(
             body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,6),Pair(11,8)),
             eye = Pair(9,6),
             notes = listOf(Pair(3,8), Pair(2,9))
         ),
-        // 12: Groove left 2
         DanceStep(
             body = listOf(Pair(8,6), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,8)),
             eye = Pair(9,5),
             notes = listOf(Pair(2,8), Pair(6,4), Pair(5,3))
         ),
-        // 13: Happy hop left (paws tucked, chubby body)
         DanceStep(
             body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7),Pair(9,8), Pair(10,3),Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,5),Pair(11,7)),
             eye = Pair(9,5),
             notes = listOf(Pair(5,4), Pair(4,3))
         ),
-        // 14: Land left (paws wide)
         DanceStep(
             body = listOf(Pair(8,5), Pair(9,4),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,9)),
             eye = Pair(9,5),
             notes = listOf(Pair(4,4), Pair(3,3))
         ),
-        // 15: Center groove back to 0
         DanceStep(
             body = listOf(Pair(9,5),Pair(9,6),Pair(9,7), Pair(10,4),Pair(10,5),Pair(10,6),Pair(10,7),Pair(10,8), Pair(11,4),Pair(11,6),Pair(11,8)),
             eye = Pair(9,6),
@@ -200,7 +189,7 @@ object HamsterFrames13x13 {
             grid[r * MATRIX_SIZE + c] = WHEEL_BRIGHTNESS
         }
         val phase = ((spokePhase % 4) + 4) % 4
-        for ((r, c) in SPOKE_PHASES_CW[phase]) {
+        for ((r, c) in SPOKE_PHASES_FORWARD[phase]) {
             if (isValidCell(r, c)) {
                 grid[r * MATRIX_SIZE + c] = WHEEL_BRIGHTNESS
             }
@@ -254,9 +243,9 @@ object HamsterFrames13x13 {
 
         val legs = when (phase) {
             0 -> listOf(Pair(11, 3), Pair(11, 7))
-            1 -> listOf(Pair(11, 4), Pair(11, 6))
+            1 -> listOf(Pair(11, 4), Pair(11, 8)) // Screenshot 3 stride matches Phase 1 spoke!
             2 -> listOf(Pair(11, 5), Pair(11, 7))
-            else -> listOf(Pair(11, 4), Pair(11, 8))
+            else -> listOf(Pair(11, 4), Pair(11, 6)) // Screenshot 4 stride matches Phase 3 spoke!
         }
         for ((r, c) in legs) {
             grid[r * MATRIX_SIZE + c] = HAMSTER_BRIGHTNESS
@@ -265,6 +254,12 @@ object HamsterFrames13x13 {
         return grid
     }
 
+    /**
+     * Full 360-degree CLOCKWISE revolution (`loopStep` 0..11) on the wheel when unplugged:
+     * Since the bottom of the wheel moves from right to left (clockwise), the hamster is carried
+     * from Bottom (6 o'clock) -> Left wall (9 o'clock) -> Top (12 o'clock) -> Right wall (3 o'clock) -> Bottom,
+     * while the wheel spokes also rotate in the exact same forward clockwise direction (`step % 4`).
+     */
     fun getWheelLoopFrame(loopStep: Int): IntArray {
         val step = ((loopStep % WHEEL_LOOP_STEPS) + WHEEL_LOOP_STEPS) % WHEEL_LOOP_STEPS
         val grid = buildWheelBase(spokePhase = step % 4)
@@ -285,12 +280,9 @@ object HamsterFrames13x13 {
         return grid
     }
 
-    /**
-     * 16-frame smooth Dancing Hamster animation on a STATIONARY wheel (`spokePhase = 0`).
-     */
     fun getDancingFrame(stepIndex: Int): IntArray {
         val idx = ((stepIndex % DANCE_CYCLE_LENGTH) + DANCE_CYCLE_LENGTH) % DANCE_CYCLE_LENGTH
-        val grid = buildWheelBase(spokePhase = 0) // Wheel stays completely still!
+        val grid = buildWheelBase(spokePhase = 0)
         val step = DANCE_STEPS_16[idx]
 
         for ((r, c) in step.body) {
@@ -315,9 +307,6 @@ object HamsterFrames13x13 {
         return Bitmap.createBitmap(pixels, MATRIX_SIZE, MATRIX_SIZE, Bitmap.Config.ARGB_8888)
     }
 
-    /**
-     * Renders the 13×13 Glyph Matrix circle into a crisp Bitmap for the Home Screen & Lock Screen Widget.
-     */
     fun toWidgetBitmap(frame169: IntArray, sizePx: Int = 280): Bitmap {
         val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)

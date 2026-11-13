@@ -1,9 +1,11 @@
 package com.nothing4apro.hamsterwheel
 
 import android.Manifest
+import android.app.AlertDialog
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -11,10 +13,12 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -24,37 +28,48 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
+/**
+ * Nothing OS styled companion UI modeled directly on the reference "CHARGING HAMSTER" screenshots:
+ * - Authentic 5×7 dot-matrix headings (DotMatrixTextView)
+ * - Clean dark #161618 rounded cards (24dp radius)
+ * - Pill-shaped buttons ("Edit in Glyph settings", "Add Widget", "Excluded Apps")
+ * - Zero annoying notifications by default (toggleable in settings)
+ * - Built-in App Exclusion Manager to block any specific app from triggering the music dance
+ */
 class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
 
     private lateinit var previewView: GlyphMatrixPreviewView
-    private lateinit var statusSubtitle: TextView
-    private lateinit var powerToggleBtn: Button
-    private lateinit var simulateBtn: Button
+    private lateinit var statusSubText: TextView
+    private lateinit var powerChipBtn: Button
+    private lateinit var simulateChargeBtn: Button
     private lateinit var simulateMusicBtn: Button
-    private lateinit var musicDanceSwitch: Switch
-    private lateinit var ignoreYoutubeSwitch: Switch
     private lateinit var grantNotifListenerBtn: Button
-    private lateinit var screenOnSwitch: Switch
-    private lateinit var onlyChargingSwitch: Switch
+    private lateinit var excludedCountText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestNotificationPermissionIfNeeded()
+        window.statusBarColor = Color.BLACK
+        window.navigationBarColor = Color.BLACK
+
         HamsterAnimatorEngine.loadPrefs(this)
         if (HamsterAnimatorEngine.isGlyphEnabled) {
-            HamsterForegroundService.startService(this)
+            if (HamsterAnimatorEngine.foregroundNotificationEnabled) {
+                requestNotificationPermissionIfNeeded()
+                HamsterForegroundService.startService(this)
+            }
             HamsterAnimatorEngine.start(this)
         }
 
-        setContentView(buildUi())
+        setContentView(buildNothingOsUi())
     }
 
     override fun onResume() {
         super.onResume()
         HamsterAnimatorEngine.addListener(this)
         HamsterAnimatorEngine.pollMusicStateSilently(this)
-        updateYoutubePermissionButtonVisibility()
+        updateYoutubePermissionVisibility()
+        updateExcludedAppsSummary()
     }
 
     override fun onPause() {
@@ -62,13 +77,20 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         super.onPause()
     }
 
-    private fun updateYoutubePermissionButtonVisibility() {
+    private fun updateYoutubePermissionVisibility() {
         if (!::grantNotifListenerBtn.isInitialized) return
         val granted = MediaSessionMonitorService.isNotificationListenerGranted(this)
-        grantNotifListenerBtn.visibility = if (HamsterAnimatorEngine.ignoreYoutubeEnabled && !granted) {
-            View.VISIBLE
+        grantNotifListenerBtn.visibility = if (!granted) View.VISIBLE else View.GONE
+    }
+
+    private fun updateExcludedAppsSummary() {
+        if (!::excludedCountText.isInitialized) return
+        val custom = MediaSessionMonitorService.getCustomIgnoredPackages(this)
+        val totalDefault = MediaSessionMonitorService.DEFAULT_IGNORED_PACKAGES.size
+        excludedCountText.text = if (custom.isEmpty()) {
+            "В списке исключений: YouTube, TikTok, Twitch и еще $totalDefault видеоплееров. Нажмите «Настроить исключения», чтобы добавить любое свое приложение."
         } else {
-            View.GONE
+            "Исключено по умолчанию ($totalDefault) + ваши приложения (${custom.size}): ${custom.joinToString(", ")}"
         }
     }
 
@@ -83,168 +105,333 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         runOnUiThread {
             previewView.updateFrame(frame169)
 
-            statusSubtitle.text = when {
-                !isEnabled -> "Игрушка ВЫКЛЮЧЕНА (матрица свободна для других игрушек)"
-                state == HamsterAnimatorEngine.State.RUNNING -> "Хомячок бежит в колесе ⚡ (${frameDelayMs} мс)"
-                state == HamsterAnimatorEngine.State.WHEEL_LOOP_STOP -> "Зарядка вынута: оборот 360° по часовой стрелке 🎡 (${frameDelayMs} мс)"
-                state == HamsterAnimatorEngine.State.DANCING -> "Играет музыка: хомячок танцует! 🎵 (${frameDelayMs} мс)"
-                else -> "Хомячок спит в колесе 💤 (${frameDelayMs} мс)"
+            statusSubText.text = when {
+                !isEnabled -> "A little hamster to power your phone · OFF"
+                state == HamsterAnimatorEngine.State.RUNNING -> "A little hamster to power your phone · Running ⚡"
+                state == HamsterAnimatorEngine.State.WHEEL_LOOP_STOP -> "A little hamster to power your phone · Spinning stop 🎡"
+                state == HamsterAnimatorEngine.State.DANCING -> "A little hamster to power your phone · Dancing to music 🎵"
+                else -> "A little hamster to power your phone"
             }
 
             if (isEnabled) {
-                powerToggleBtn.text = "⏹ ВЫКЛЮЧИТЬ ИГРУШКУ (Освободить матрицу)"
-                powerToggleBtn.background = roundedBg("#2A1215", "#FF453A")
-                powerToggleBtn.setTextColor(Color.parseColor("#FF6961"))
+                powerChipBtn.text = "Active · Tap to turn OFF"
+                powerChipBtn.background = pillBg("#26262B", "#3A3A42")
+                powerChipBtn.setTextColor(Color.parseColor("#E5E5EA"))
             } else {
-                powerToggleBtn.text = "▶ ВКЛЮЧИТЬ ИГРУШКУ CHARGING HAMSTER"
-                powerToggleBtn.background = roundedBg("#142E1F", "#30D158")
-                powerToggleBtn.setTextColor(Color.parseColor("#30D158"))
+                powerChipBtn.text = "Disabled · Tap to turn ON"
+                powerChipBtn.background = pillBg("#D71921", "#FF453A")
+                powerChipBtn.setTextColor(Color.WHITE)
             }
 
-            simulateBtn.text = if (isCharging) {
-                "Вынуть зарядку (Оборот 360° по часовой стрелке)"
-            } else {
-                "Подключить зарядку (Запуск бега)"
-            }
-
-            simulateMusicBtn.text = if (isMusicPlaying) {
-                "Остановить симуляцию музыки"
-            } else {
-                "Симулировать музыку 🎵 (Танец хомячка)"
-            }
+            simulateChargeBtn.text = if (isCharging) "Unplug test (360° spin)" else "Test charging run"
+            simulateMusicBtn.text = if (isMusicPlaying) "Stop music test" else "Test music dance"
         }
     }
 
-    private fun buildUi(): ScrollView {
+    private fun buildNothingOsUi(): ScrollView {
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#000000"))
+            setBackgroundColor(Color.BLACK)
             isFillViewport = true
         }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            val pad = dp(20)
-            setPadding(pad, dp(28), pad, pad)
+            setPadding(dp(16), dp(20), dp(16), dp(32))
         }
 
+        // 1. Top Nothing OS "WIDGETS   TOYS" header bar
+        val topTabsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = dp(8)
+                bottomMargin = dp(18)
+            }
+        }
+
+        val widgetsTab = DotMatrixTextView(this).apply {
+            text = "WIDGETS"
+            dotColor = Color.parseColor("#63636A")
+            dotDiameterPx = dpF(2.2f)
+            dotGapPx = dpF(0.9f)
+            setPadding(0, dp(4), dp(22), dp(6))
+            setOnClickListener { requestPinHamsterWidget() }
+        }
+        topTabsRow.addView(widgetsTab)
+
+        val toysTabCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        val toysTab = DotMatrixTextView(this).apply {
+            text = "TOYS"
+            dotColor = Color.WHITE
+            dotDiameterPx = dpF(2.2f)
+            dotGapPx = dpF(0.9f)
+            setPadding(0, dp(4), 0, dp(6))
+        }
+        toysTabCol.addView(toysTab)
+        val underline = View(this).apply {
+            setBackgroundColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(dp(44), dp(2))
+        }
+        toysTabCol.addView(underline)
+        topTabsRow.addView(toysTabCol)
+        root.addView(topTabsRow)
+
+        // 2. Center 13x13 Glyph Matrix Preview Circle
         previewView = GlyphMatrixPreviewView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(240), dp(240)).apply {
-                bottomMargin = dp(20)
+            layoutParams = LinearLayout.LayoutParams(dp(236), dp(236)).apply {
+                topMargin = dp(6)
+                bottomMargin = dp(24)
             }
         }
         root.addView(previewView)
 
-        // Card 1: Master Info, Power Switch, Widget Pin & Glyph Settings
-        val mainCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = roundedBg("#161618", "#26262A")
-            val p = dp(18)
-            setPadding(p, p, p, p)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = dp(14)
-            }
-        }
-
-        val title = TextView(this).apply {
+        // 3. Card 1: CHARGING HAMSTER Title Card (matches screenshot 1:1)
+        val heroCard = createNothingCard()
+        val dotTitle = DotMatrixTextView(this).apply {
             text = "CHARGING HAMSTER"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            dotColor = Color.WHITE
+            dotDiameterPx = dpF(2.5f)
+            dotGapPx = dpF(1.0f)
+            setPadding(0, 0, 0, dp(10))
         }
-        mainCard.addView(title)
+        heroCard.addView(dotTitle)
 
-        statusSubtitle = TextView(this).apply {
-            text = "A little hamster to power your phone (13×13)"
-            setTextColor(Color.parseColor("#9A9AA2"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, dp(6), 0, dp(14))
+        statusSubText = TextView(this).apply {
+            text = "A little hamster to power your phone"
+            setTextColor(Color.parseColor("#8E8E93"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.SANS_SERIF
+            setPadding(0, 0, 0, dp(20))
         }
-        mainCard.addView(statusSubtitle)
+        heroCard.addView(statusSubText)
 
-        powerToggleBtn = Button(this).apply {
-            isAllCaps = false
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+        val heroBtnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        powerChipBtn = Button(this).apply {
+            text = "Active · Tap to turn OFF"
+            isAllCaps = false
+            setTextColor(Color.parseColor("#E5E5EA"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            background = pillBg("#26262B", "#3A3A42")
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(40)
             ).apply {
-                bottomMargin = dp(10)
+                rightMargin = dp(10)
             }
             setOnClickListener {
                 val next = !HamsterAnimatorEngine.isGlyphEnabled
                 HamsterAnimatorEngine.setGlyphEnabled(this@MainActivity, next)
             }
         }
-        mainCard.addView(powerToggleBtn)
+        heroBtnRow.addView(powerChipBtn)
 
-        val addWidgetBtn = Button(this).apply {
-            text = "➕ Добавить кружок-виджет на экран"
+        val editGlyphBtn = Button(this).apply {
+            text = "Edit in Glyph settings"
             isAllCaps = false
             setTextColor(Color.WHITE)
-            typeface = Typeface.MONOSPACE
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            background = pillBg("#2C2C30", "#3A3A40")
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(40)
+            )
+            setOnClickListener { openNothingGlyphToySettings() }
+        }
+        heroBtnRow.addView(editGlyphBtn)
+        heroCard.addView(heroBtnRow)
+        root.addView(heroCard)
+
+        // 4. Card 2: ONLY SHOW WHILE CHARGING (matches screenshot 1:1)
+        val onlyChargingCard = createNothingCard()
+        onlyChargingCard.addView(
+            createDotMatrixSwitchRow(
+                dotLabel = "ONLY SHOW WHILE CHARGING",
+                initialChecked = HamsterAnimatorEngine.onlyShowWhileCharging
+            ) { isChecked ->
+                HamsterAnimatorEngine.setOnlyShowWhileCharging(this, isChecked)
+            }
+        )
+        val onlyChargingDesc = TextView(this).apply {
+            text = "When your phone isn't charging, the Glyph Matrix stays blank instead of the sleeping hamster. The wheel spin animation still plays once when you unplug."
+            setTextColor(Color.parseColor("#8E8E93"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setLineSpacing(0f, 1.15f)
+            setPadding(0, dp(10), 0, 0)
+        }
+        onlyChargingCard.addView(onlyChargingDesc)
+        root.addView(onlyChargingCard)
+
+        // 5. Card 3: DANCE TO MUSIC & APP EXCLUSIONS
+        val musicCard = createNothingCard()
+        musicCard.addView(
+            createDotMatrixSwitchRow(
+                dotLabel = "DANCE TO MUSIC",
+                initialChecked = HamsterAnimatorEngine.musicDanceEnabled
+            ) { isChecked ->
+                HamsterAnimatorEngine.setMusicDanceEnabled(this, isChecked)
+            }
+        )
+        val musicDesc = TextView(this).apply {
+            text = "When music plays on your phone, the hamster dances in place while the wheel stays still. Charging always takes priority."
+            setTextColor(Color.parseColor("#8E8E93"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setLineSpacing(0f, 1.15f)
+            setPadding(0, dp(10), 0, dp(16))
+        }
+        musicCard.addView(musicDesc)
+
+        musicCard.addView(
+            createDotMatrixSwitchRow(
+                dotLabel = "IGNORE YOUTUBE",
+                initialChecked = HamsterAnimatorEngine.ignoreYoutubeEnabled
+            ) { isChecked ->
+                HamsterAnimatorEngine.setIgnoreYoutubeEnabled(this, isChecked)
+            }
+        )
+
+        excludedCountText = TextView(this).apply {
+            setTextColor(Color.parseColor("#8E8E93"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setLineSpacing(0f, 1.15f)
+            setPadding(0, dp(8), 0, dp(14))
+        }
+        musicCard.addView(excludedCountText)
+        updateExcludedAppsSummary()
+
+        val exclusionBtnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        grantNotifListenerBtn = Button(this).apply {
+            text = "Grant media access"
+            isAllCaps = false
+            setTextColor(Color.parseColor("#FFD60A"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            background = roundedBg("#222228", "#3A3A44")
-            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = pillBg("#2B2612", "#665718")
+            setPadding(dp(14), dp(6), dp(14), dp(6))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(38)
+            ).apply {
+                rightMargin = dp(8)
+            }
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                } catch (_: Throwable) {
+                    startActivity(Intent(Settings.ACTION_SETTINGS))
+                }
+            }
+        }
+        exclusionBtnRow.addView(grantNotifListenerBtn)
+        updateYoutubePermissionVisibility()
+
+        val manageExclusionsBtn = Button(this).apply {
+            text = "Excluded apps (+)"
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            background = pillBg("#2C2C30", "#3A3A40")
+            setPadding(dp(16), dp(6), dp(16), dp(6))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                dp(38)
+            )
+            setOnClickListener { showExcludedAppsDialog() }
+        }
+        exclusionBtnRow.addView(manageExclusionsBtn)
+        musicCard.addView(exclusionBtnRow)
+        root.addView(musicCard)
+
+        // 6. Card 4: SCREEN-ON & SILENT MODE (No annoying notifications!)
+        val systemCard = createNothingCard()
+        systemCard.addView(
+            createDotMatrixSwitchRow(
+                dotLabel = "KEEP ON WITH SCREEN",
+                initialChecked = HamsterAnimatorEngine.keepScreenOnActive
+            ) { isChecked ->
+                HamsterAnimatorEngine.setKeepScreenOnActive(this, isChecked)
+            }
+        )
+        val screenDesc = TextView(this).apply {
+            text = "Keeps the Glyph Matrix animation active even when your screen is unlocked. Turn off if you want standard AOD-only behavior."
+            setTextColor(Color.parseColor("#8E8E93"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setLineSpacing(0f, 1.15f)
+            setPadding(0, dp(10), 0, dp(16))
+        }
+        systemCard.addView(screenDesc)
+
+        systemCard.addView(
+            createDotMatrixSwitchRow(
+                dotLabel = "STATUS NOTIFICATION",
+                initialChecked = HamsterAnimatorEngine.foregroundNotificationEnabled
+            ) { isChecked ->
+                if (isChecked) requestNotificationPermissionIfNeeded()
+                HamsterAnimatorEngine.setForegroundNotificationEnabled(this, isChecked)
+            }
+        )
+        val notifDesc = TextView(this).apply {
+            text = "Off by default so no notification sits in your shade. While selected as your active Glyph Toy in Nothing OS, animations work without any notification."
+            setTextColor(Color.parseColor("#8E8E93"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setLineSpacing(0f, 1.15f)
+            setPadding(0, dp(10), 0, 0)
+        }
+        systemCard.addView(notifDesc)
+        root.addView(systemCard)
+
+        // 7. Card 5: QUICK PREVIEW & WIDGET TOOLS
+        val toolsCard = createNothingCard()
+        val toolsHeader = DotMatrixTextView(this).apply {
+            text = "PREVIEW AND WIDGET"
+            dotColor = Color.WHITE
+            dotDiameterPx = dpF(2.1f)
+            dotGapPx = dpF(0.85f)
+            setPadding(0, 0, 0, dp(14))
+        }
+        toolsCard.addView(toolsHeader)
+
+        val simRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 bottomMargin = dp(10)
             }
-            setOnClickListener { requestPinHamsterWidget() }
         }
-        mainCard.addView(addWidgetBtn)
 
-        val settingsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END
-        }
-        val editGlyphBtn = Button(this).apply {
-            text = "Edit in Glyph settings"
+        simulateChargeBtn = Button(this).apply {
+            text = "Test charging run"
             isAllCaps = false
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            background = roundedBg("#2C2C30", "#3A3A40", cornerDp = 20)
-            setPadding(dp(18), dp(10), dp(18), dp(10))
-            setOnClickListener { openNothingGlyphToySettings() }
-        }
-        settingsRow.addView(editGlyphBtn)
-        mainCard.addView(settingsRow)
-        root.addView(mainCard)
-
-        // Card 2: Interactive Test Controls
-        val testCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = roundedBg("#161618", "#26262A")
-            val p = dp(16)
-            setPadding(p, p, p, p)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = dp(14)
-            }
-        }
-
-        simulateBtn = Button(this).apply {
-            text = "Подключить зарядку (Запуск бега)"
-            isAllCaps = false
-            setTextColor(Color.WHITE)
-            typeface = Typeface.MONOSPACE
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            background = roundedBg("#D71921", "#FF453A")
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = dp(8)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            background = pillBg("#2C2C30", "#3A3A40")
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                rightMargin = dp(6)
             }
             setOnClickListener {
                 if (!HamsterAnimatorEngine.isGlyphEnabled) {
@@ -255,21 +442,16 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
                 HamsterAnimatorEngine.setManualOverride(!active)
             }
         }
-        testCard.addView(simulateBtn)
+        simRow.addView(simulateChargeBtn)
 
         simulateMusicBtn = Button(this).apply {
-            text = "Симулировать музыку 🎵 (Танец хомячка)"
+            text = "Test music dance"
             isAllCaps = false
-            setTextColor(Color.parseColor("#FFD60A"))
-            typeface = Typeface.MONOSPACE
+            setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            background = roundedBg("#2B2816", "#8A7400")
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = dp(8)
+            background = pillBg("#2C2C30", "#3A3A40")
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                leftMargin = dp(6)
             }
             setOnClickListener {
                 val active = HamsterAnimatorEngine.manualMusicOverride
@@ -277,148 +459,183 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
                 HamsterAnimatorEngine.setManualMusicOverride(!active)
             }
         }
-        testCard.addView(simulateMusicBtn)
+        simRow.addView(simulateMusicBtn)
+        toolsCard.addView(simRow)
 
-        val autoCableBtn = Button(this).apply {
-            text = "Сбросить тесты (Реакция на реальный кабель и плеер)"
-            isAllCaps = false
-            setTextColor(Color.parseColor("#C8C8D0"))
-            typeface = Typeface.MONOSPACE
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            background = roundedBg("#222226", "#323238")
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            setOnClickListener {
-                HamsterAnimatorEngine.setManualOverride(null)
-                HamsterAnimatorEngine.setManualMusicOverride(null)
-                HamsterAnimatorEngine.syncBatteryChargingState(this@MainActivity)
-                HamsterAnimatorEngine.pollMusicStateSilently(this@MainActivity)
-                Toast.makeText(this@MainActivity, "Автоматический режим включен", Toast.LENGTH_SHORT).show()
-            }
-        }
-        testCard.addView(autoCableBtn)
-        root.addView(testCard)
-
-        // Card 3: Switches
-        val optionsCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = roundedBg("#161618", "#26262A")
-            val p = dp(18)
-            setPadding(p, p, p, p)
+        val bottomToolsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
         }
 
-        musicDanceSwitch = Switch(this).apply {
-            text = "ТАНЕЦ ПОД МУЗЫКУ (AUDIO ACTIVE)"
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            isChecked = HamsterAnimatorEngine.musicDanceEnabled
-            setOnCheckedChangeListener { _, isChecked ->
-                HamsterAnimatorEngine.setMusicDanceEnabled(this@MainActivity, isChecked)
-            }
-        }
-        optionsCard.addView(musicDanceSwitch)
-
-        val musicDesc = TextView(this).apply {
-            text = "Хомячок плавно танцует на месте (колесо не крутится), когда играет музыка. Зарядка всегда имеет приоритет."
-            setTextColor(Color.parseColor("#8E8E96"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(4), 0, dp(14))
-        }
-        optionsCard.addView(musicDesc)
-
-        ignoreYoutubeSwitch = Switch(this).apply {
-            text = "НЕ РЕАГИРОВАТЬ НА YOUTUBE И ВИДЕО"
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            isChecked = HamsterAnimatorEngine.ignoreYoutubeEnabled
-            setOnCheckedChangeListener { _, isChecked ->
-                HamsterAnimatorEngine.setIgnoreYoutubeEnabled(this@MainActivity, isChecked)
-                updateYoutubePermissionButtonVisibility()
-            }
-        }
-        optionsCard.addView(ignoreYoutubeSwitch)
-
-        val youtubeDesc = TextView(this).apply {
-            text = "Фильтрует активные медиа-сессии: хомячок танцует под Spotify, YouTube Music, Яндекс Музыку и др., но игнорирует ролики в обычном YouTube, TikTok и видеоплеерах."
-            setTextColor(Color.parseColor("#8E8E96"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(4), 0, dp(8))
-        }
-        optionsCard.addView(youtubeDesc)
-
-        grantNotifListenerBtn = Button(this).apply {
-            text = "🔑 Разрешить определение плеера (чтобы отличать YouTube от музыки)"
+        val resetAutoBtn = Button(this).apply {
+            text = "Reset to live sensors"
             isAllCaps = false
-            setTextColor(Color.parseColor("#FFD60A"))
-            typeface = Typeface.MONOSPACE
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            background = roundedBg("#2B2816", "#8A7400")
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setTextColor(Color.parseColor("#9A9AA2"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            background = pillBg("#202024", "#2E2E34")
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                rightMargin = dp(6)
+            }
+            setOnClickListener {
+                HamsterAnimatorEngine.setManualOverride(null)
+                HamsterAnimatorEngine.setManualMusicOverride(null)
+                HamsterAnimatorEngine.syncBatteryChargingState(this@MainActivity)
+                HamsterAnimatorEngine.pollMusicStateSilently(this@MainActivity)
+                Toast.makeText(this@MainActivity, "Synced with live USB & media state", Toast.LENGTH_SHORT).show()
+            }
+        }
+        bottomToolsRow.addView(resetAutoBtn)
+
+        val pinWidgetBtn = Button(this).apply {
+            text = "Add Home Widget"
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            background = pillBg("#2C2C30", "#3A3A40")
+            layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
+                leftMargin = dp(6)
+            }
+            setOnClickListener { requestPinHamsterWidget() }
+        }
+        bottomToolsRow.addView(pinWidgetBtn)
+        toolsCard.addView(bottomToolsRow)
+        root.addView(toolsCard)
+
+        scroll.addView(root)
+        return scroll
+    }
+
+    private fun createNothingCard(): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#161618"))
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.parseColor("#232327"))
+            }
+            val p = dp(20)
+            setPadding(p, p, p, p)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 bottomMargin = dp(14)
             }
-            setOnClickListener {
-                try {
-                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                } catch (_: Throwable) {
-                    startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+
+    private fun createDotMatrixSwitchRow(
+        dotLabel: String,
+        initialChecked: Boolean,
+        onToggle: (Boolean) -> Unit
+    ): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val labelView = DotMatrixTextView(this).apply {
+            text = dotLabel
+            dotColor = Color.WHITE
+            dotDiameterPx = dpF(2.1f)
+            dotGapPx = dpF(0.85f)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        row.addView(labelView)
+
+        val sw = Switch(this).apply {
+            isChecked = initialChecked
+            setOnCheckedChangeListener { _, isChecked -> onToggle(isChecked) }
+        }
+        row.addView(sw)
+        return row
+    }
+
+    /**
+     * Shows a dialog where the user can pick any installed app on their phone (or type a package name)
+     * to exclude it from triggering the dancing hamster animation.
+     */
+    private fun showExcludedAppsDialog() {
+        val pm = packageManager
+        val installedApps = try {
+            pm.getInstalledApplications(PackageManager.GET_META_DATA)
+                .filter { app ->
+                    // Show user-installed apps and media/launchable system apps
+                    (app.flags and ApplicationInfo.FLAG_SYSTEM) == 0 ||
+                            pm.getLaunchIntentForPackage(app.packageName) != null
                 }
+                .map { app ->
+                    val label = pm.getApplicationLabel(app).toString()
+                    Pair(label, app.packageName.lowercase())
+                }
+                .distinctBy { it.second }
+                .sortedBy { it.first.lowercase() }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+
+        val currentExcluded = MediaSessionMonitorService.getCustomIgnoredPackages(this).toMutableSet()
+
+        if (installedApps.isNotEmpty()) {
+            val labels = installedApps.map { "${it.first} (${it.second})" }.toTypedArray()
+            val checked = BooleanArray(installedApps.size) { idx ->
+                currentExcluded.contains(installedApps[idx].second)
             }
-        }
-        optionsCard.addView(grantNotifListenerBtn)
-        updateYoutubePermissionButtonVisibility()
 
-        onlyChargingSwitch = Switch(this).apply {
-            text = "ONLY SHOW WHILE CHARGING"
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            isChecked = HamsterAnimatorEngine.onlyShowWhileCharging
-            setOnCheckedChangeListener { _, isChecked ->
-                HamsterAnimatorEngine.setOnlyShowWhileCharging(this@MainActivity, isChecked)
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Исключения для танца под музыку")
+                .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                    val pkg = installedApps[which].second
+                    if (isChecked) {
+                        currentExcluded.add(pkg)
+                    } else {
+                        currentExcluded.remove(pkg)
+                    }
+                }
+                .setPositiveButton("Сохранить") { _, _ ->
+                    MediaSessionMonitorService.setCustomIgnoredPackages(this, currentExcluded)
+                    HamsterAnimatorEngine.pollMusicStateSilently(this)
+                    updateExcludedAppsSummary()
+                    Toast.makeText(this, "Список исключений сохранен", Toast.LENGTH_SHORT).show()
+                }
+                .setNeutralButton("Ввести пакет вручную") { _, _ ->
+                    showManualPackageInputDialog()
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
+        } else {
+            showManualPackageInputDialog()
+        }
+    }
+
+    private fun showManualPackageInputDialog() {
+        val input = EditText(this).apply {
+            hint = "Например: org.telegram.messenger"
+            inputType = InputType.TYPE_CLASS_TEXT
+            setText(MediaSessionMonitorService.getCustomIgnoredPackages(this@MainActivity).joinToString(", "))
+        }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Пакеты-исключения (через запятую)")
+            .setView(input)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val raw = input.text.toString()
+                val pkgs = raw.split(",", ";", " ", "\n")
+                    .map { it.trim().lowercase() }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+                MediaSessionMonitorService.setCustomIgnoredPackages(this, pkgs)
+                HamsterAnimatorEngine.pollMusicStateSilently(this)
+                updateExcludedAppsSummary()
             }
-        }
-        optionsCard.addView(onlyChargingSwitch)
-
-        val onlyChargingDesc = TextView(this).apply {
-            text = "Когда телефон не заряжается, матрица гаснет вместо спящего хомячка. При отключении кабеля анимация оборота на колесе всё равно проигрывается один раз."
-            setTextColor(Color.parseColor("#8E8E96"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(4), 0, dp(16))
-        }
-        optionsCard.addView(onlyChargingDesc)
-
-        screenOnSwitch = Switch(this).apply {
-            text = "РАБОТАТЬ ПРИ ВКЛЮЧЕННОМ ЭКРАНЕ"
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            isChecked = HamsterAnimatorEngine.keepScreenOnActive
-            setOnCheckedChangeListener { _, isChecked ->
-                HamsterAnimatorEngine.setKeepScreenOnActive(this@MainActivity, isChecked)
-            }
-        }
-        optionsCard.addView(screenOnSwitch)
-
-        val screenOnDesc = TextView(this).apply {
-            text = "Удерживает анимацию активной при разблокировке экрана. Отключите тумблер, если хотите работу строго как AOD-игрушка."
-            setTextColor(Color.parseColor("#8E8E96"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(4), 0, 0)
-        }
-        optionsCard.addView(screenOnDesc)
-
-        root.addView(optionsCard)
-        scroll.addView(root)
-        return scroll
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 
     private fun requestPinHamsterWidget() {
@@ -429,16 +646,16 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
         } else {
             Toast.makeText(
                 this,
-                "Зажмите палец на рабочем столе → Виджеты → Charging Hamster 13×13",
+                "Long-press on home screen → Widgets → Charging Hamster 13×13",
                 Toast.LENGTH_LONG
             ).show()
         }
     }
 
-    private fun roundedBg(fillHex: String, strokeHex: String, cornerDp: Int = 18): GradientDrawable {
+    private fun pillBg(fillHex: String, strokeHex: String): GradientDrawable {
         return GradientDrawable().apply {
             setColor(Color.parseColor(fillHex))
-            cornerRadius = dp(cornerDp).toFloat()
+            cornerRadius = dp(22).toFloat()
             setStroke(dp(1), Color.parseColor(strokeHex))
         }
     }
@@ -493,5 +710,13 @@ class MainActivity : AppCompatActivity(), HamsterAnimatorEngine.FrameListener {
             value.toFloat(),
             resources.displayMetrics
         ).toInt()
+    }
+
+    private fun dpF(value: Float): Float {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value,
+            resources.displayMetrics
+        )
     }
 }

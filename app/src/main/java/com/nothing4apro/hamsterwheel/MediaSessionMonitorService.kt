@@ -9,15 +9,16 @@ import android.provider.Settings
 import android.service.notification.NotificationListenerService
 
 /**
- * Lightweight NotificationListenerService that allows reading active MediaSessions
- * so we can ignore video apps like YouTube (`com.google.android.youtube`, ReVanced, browsers)
- * while reacting to music players (Spotify, YouTube Music, Yandex Music, Apple Music, etc.).
+ * Monitors active MediaSessions so the hamster dances to music players while ignoring
+ * YouTube, video players, and any custom apps added by the user to the exclusion list.
  */
 class MediaSessionMonitorService : NotificationListenerService() {
 
     companion object {
-        // Video / browser packages that should NOT trigger the dancing hamster
-        private val IGNORED_VIDEO_PACKAGES = setOf(
+        private const val PREFS_NAME = "hamster_glyph_prefs"
+        private const val KEY_CUSTOM_IGNORED_PKGS = "custom_ignored_packages"
+
+        val DEFAULT_IGNORED_PACKAGES = setOf(
             "com.google.android.youtube",
             "app.revanced.android.youtube",
             "app.rvx.android.youtube",
@@ -32,6 +33,30 @@ class MediaSessionMonitorService : NotificationListenerService() {
             "com.mxtech.videoplayer.pro"
         )
 
+        fun getCustomIgnoredPackages(context: Context): Set<String> {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getStringSet(KEY_CUSTOM_IGNORED_PKGS, emptySet())?.toSet() ?: emptySet()
+        }
+
+        fun setCustomIgnoredPackages(context: Context, packages: Set<String>) {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putStringSet(KEY_CUSTOM_IGNORED_PKGS, packages).apply()
+        }
+
+        fun addIgnoredPackage(context: Context, pkg: String) {
+            val cleaned = pkg.trim().lowercase()
+            if (cleaned.isEmpty()) return
+            val current = getCustomIgnoredPackages(context).toMutableSet()
+            current.add(cleaned)
+            setCustomIgnoredPackages(context, current)
+        }
+
+        fun removeIgnoredPackage(context: Context, pkg: String) {
+            val current = getCustomIgnoredPackages(context).toMutableSet()
+            current.remove(pkg.trim().lowercase())
+            setCustomIgnoredPackages(context, current)
+        }
+
         fun isNotificationListenerGranted(context: Context): Boolean {
             val flat = Settings.Secure.getString(
                 context.contentResolver,
@@ -41,13 +66,7 @@ class MediaSessionMonitorService : NotificationListenerService() {
             return flat.contains(cn)
         }
 
-        /**
-         * Returns:
-         * - `true` if an actual music app is actively playing
-         * - `false` if only YouTube / video app is playing, or nothing is playing
-         * - `null` if NotificationListener permission isn't granted yet (fallback to AudioManager)
-         */
-        fun isMusicAppPlayingExcludingYoutube(context: Context): Boolean? {
+        fun isMusicAppPlayingExcludingIgnored(context: Context, filterVideoAndCustom: Boolean): Boolean? {
             if (!isNotificationListenerGranted(context)) return null
             return try {
                 val msm = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
@@ -56,8 +75,9 @@ class MediaSessionMonitorService : NotificationListenerService() {
                 val controllers: List<MediaController> = msm.getActiveSessions(component)
                 if (controllers.isEmpty()) return false
 
+                val customIgnored = getCustomIgnoredPackages(context)
                 var anyAllowedMusicPlaying = false
-                var anyIgnoredVideoPlaying = false
+                var anyIgnoredPlaying = false
 
                 for (controller in controllers) {
                     val state = controller.playbackState?.state
@@ -65,12 +85,15 @@ class MediaSessionMonitorService : NotificationListenerService() {
                     if (!isPlaying) continue
 
                     val pkg = controller.packageName.lowercase()
-                    // Keep YouTube Music ("com.google.android.apps.youtube.music") allowed,
-                    // but block regular YouTube ("com.google.android.youtube") and video players!
-                    val isYoutubeVideo = (pkg == "com.google.android.youtube" ||
-                            pkg.endsWith(".youtube") && !pkg.contains("music"))
-                    if (isYoutubeVideo || IGNORED_VIDEO_PACKAGES.contains(pkg)) {
-                        anyIgnoredVideoPlaying = true
+                    val isCustomBlocked = customIgnored.contains(pkg)
+                    val isDefaultVideoBlocked = filterVideoAndCustom && (
+                        pkg == "com.google.android.youtube" ||
+                        (pkg.endsWith(".youtube") && !pkg.contains("music")) ||
+                        DEFAULT_IGNORED_PACKAGES.contains(pkg)
+                    )
+
+                    if (isCustomBlocked || isDefaultVideoBlocked) {
+                        anyIgnoredPlaying = true
                     } else {
                         anyAllowedMusicPlaying = true
                     }
@@ -78,7 +101,7 @@ class MediaSessionMonitorService : NotificationListenerService() {
 
                 when {
                     anyAllowedMusicPlaying -> true
-                    anyIgnoredVideoPlaying -> false
+                    anyIgnoredPlaying -> false
                     else -> false
                 }
             } catch (_: Throwable) {

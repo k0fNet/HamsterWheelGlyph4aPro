@@ -17,15 +17,6 @@ import com.nothing.ketchum.GlyphMatrixManager
 import com.nothing.ketchum.GlyphMatrixObject
 import java.util.concurrent.CopyOnWriteArraySet
 
-/**
- * Core state machine and physics loop for the 13×13 Charging Hamster Glyph Toy & Home/Lock Widget.
- *
- * Priorities:
- * 1. CHARGING -> RUNNING (70 ms/step)
- * 2. UNPLUGGED FROM CHARGING -> WHEEL_LOOP_STOP (360° clockwise ride slowing down 80ms -> 250ms)
- * 3. MUSIC PLAYING (excluding YouTube video when filter active) -> DANCING (115 ms/step, 16-frame smooth groove on stationary wheel)
- * 4. IDLE -> SLEEPING (190 ms/step, 30.4s seamless single-pixel sleep particles)
- */
 object HamsterAnimatorEngine {
 
     private const val TAG = "HamsterAnimatorEngine"
@@ -35,6 +26,7 @@ object HamsterAnimatorEngine {
     private const val KEY_ONLY_WHILE_CHARGING = "only_while_charging"
     private const val KEY_MUSIC_DANCE = "music_dance_enabled"
     private const val KEY_IGNORE_YOUTUBE = "ignore_youtube_enabled"
+    private const val KEY_FG_NOTIFICATION = "fg_notification_enabled"
 
     enum class State {
         SLEEPING,
@@ -80,6 +72,10 @@ object HamsterAnimatorEngine {
     var ignoreYoutubeEnabled: Boolean = true
         private set
 
+    // Disabled by default so no annoying notification sits in the shade unless the user explicitly wants it!
+    var foregroundNotificationEnabled: Boolean = false
+        private set
+
     var currentState: State = State.SLEEPING
         private set
 
@@ -102,7 +98,7 @@ object HamsterAnimatorEngine {
 
     private const val SLEEP_STEP_DELAY_MS = 190L
     private const val RUN_STEP_DELAY_MS = 70L
-    private const val DANCE_STEP_DELAY_MS = 115L // 16 smooth frames * 115ms = 1.84s per full left-right dance cycle
+    private const val DANCE_STEP_DELAY_MS = 115L
 
     private var currentDelayMs: Long = SLEEP_STEP_DELAY_MS
     private var lastFrame169: IntArray = HamsterFrames13x13.getSleepingFrame(0)
@@ -112,12 +108,10 @@ object HamsterAnimatorEngine {
 
     private val tickRunnable = object : Runnable {
         override fun run() {
-            // Always clear any pending duplicate callbacks so two timer chains can NEVER run in parallel!
             handler.removeCallbacks(this)
             if (!isLoopRunning || !isGlyphEnabled) return
 
-            val now = SystemClock.uptimeMillis()
-            lastTickUptimeMs = now
+            lastTickUptimeMs = SystemClock.uptimeMillis()
 
             try {
                 stepSimulation()
@@ -145,6 +139,7 @@ object HamsterAnimatorEngine {
         onlyShowWhileCharging = prefs.getBoolean(KEY_ONLY_WHILE_CHARGING, false)
         musicDanceEnabled = prefs.getBoolean(KEY_MUSIC_DANCE, true)
         ignoreYoutubeEnabled = prefs.getBoolean(KEY_IGNORE_YOUTUBE, true)
+        foregroundNotificationEnabled = prefs.getBoolean(KEY_FG_NOTIFICATION, false)
     }
 
     fun setGlyphEnabled(context: Context, enabled: Boolean) {
@@ -166,8 +161,24 @@ object HamsterAnimatorEngine {
             HamsterWidgetProvider.updateAllWidgets(ctx, lastFrame169)
             notifyListeners()
         } else {
-            HamsterForegroundService.startService(ctx)
+            if (foregroundNotificationEnabled) {
+                HamsterForegroundService.startService(ctx)
+            }
             start(ctx)
+        }
+    }
+
+    fun setForegroundNotificationEnabled(context: Context, enabled: Boolean) {
+        val ctx = context.applicationContext
+        foregroundNotificationEnabled = enabled
+        ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_FG_NOTIFICATION, enabled)
+            .apply()
+        if (enabled && isGlyphEnabled) {
+            HamsterForegroundService.startService(ctx)
+        } else {
+            HamsterForegroundService.stopService(ctx)
         }
     }
 
@@ -301,18 +312,14 @@ object HamsterAnimatorEngine {
         handler.post { pushFrameToHardware(lastFrame169) }
     }
 
-    /**
-     * Updates `isMusicPlayingNow` WITHOUT scheduling duplicate handler callbacks!
-     * Uses `MediaSessionMonitorService` first to ignore YouTube if enabled and granted;
-     * falls back to `AudioManager.isMusicActive` otherwise.
-     */
     fun pollMusicStateSilently(context: Context) {
-        if (ignoreYoutubeEnabled) {
-            val sessionResult = MediaSessionMonitorService.isMusicAppPlayingExcludingYoutube(context)
-            if (sessionResult != null) {
-                isMusicPlayingNow = sessionResult
-                return
-            }
+        val sessionResult = MediaSessionMonitorService.isMusicAppPlayingExcludingIgnored(
+            context,
+            filterVideoAndCustom = ignoreYoutubeEnabled
+        )
+        if (sessionResult != null) {
+            isMusicPlayingNow = sessionResult
+            return
         }
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         isMusicPlayingNow = audioManager?.isMusicActive ?: false
@@ -535,9 +542,6 @@ object HamsterAnimatorEngine {
             val pm = ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
             val isScreenInteractive = pm?.isInteractive ?: true
 
-            // Avoid sending duplicate IPC calls on the same frame!
-            // When screen is OFF and ToyService is bound, drive via setMatrixFrame;
-            // when screen is ON and keepScreenOnActive is enabled, drive via setAppMatrixFrame.
             if (!isScreenInteractive && isToyServiceBound) {
                 gm.setMatrixFrame(rendered)
             } else if (keepScreenOnActive) {
